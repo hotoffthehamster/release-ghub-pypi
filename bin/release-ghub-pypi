@@ -166,12 +166,13 @@ must_prereqs_system () {
 
 must_prereqs_virtualenv () {
   # If already in a virtualenv, code cannot source the wrapper again unless
-  # the ~/.virtualenvs/ path (to `python`, etc.) is removed from PATH, e.g.,
-  #
-  #   PATH=$(echo "${PATH//:/$'\n'}" | grep -v -e "^${HOME}/.virtualenvs/" | tr '\n' ':')
-  #
-  # but that's not necessary, because this script doesn't need to call
-  # workon (or deactivate) if already in a venv.
+  # the ~/.virtualenvs/ path (to `python`, etc.) is removed from PATH. (We
+  # could choose not to call workon (or deactivate) if already in a venv,
+  # but it might not be the venv specified by VENV_WORKON, in which case
+  # this script will try to start the indicated venv, so we should clean up
+  # PATH and remove the venv remnants from environment that called upon us.
+  PATH=$(echo "${PATH//:/$'\n'}" | grep -v -e "^${HOME}/.virtualenvs/" | tr '\n' ':')
+
   source "${VENV_WRAPPER}"
 
   local okay=true
