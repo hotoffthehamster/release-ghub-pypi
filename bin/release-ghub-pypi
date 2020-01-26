@@ -808,6 +808,8 @@ must_ghub_latest_ge_pypi_latest () {
 query_latest_versions () {
   # Retrieves and prints versions from: PyPI, GitHub releases, and gleaned locally.
 
+  echo "Sourcing versioning: \`curl\` this, \`curl\` that..."
+
   # Query the version from the git tags of the local working directory.
   SETUPPY_LATEST_VERSION="$(setuppy_latest_version)"
   # The `python setup.py --version` returns the version of the last tag applied. I.e.,
