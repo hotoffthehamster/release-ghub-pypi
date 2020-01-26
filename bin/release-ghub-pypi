@@ -747,7 +747,7 @@ must_confirm_replace_ghub_latest () {
 #  # if [[ ${the_choice} == "y" || ${the_choice} == "Y" ]]; then
   local msg="Would you like to delete the old release from GitHub?"
   local the_choice
-  the_choice=$(upload_prompt "${msg}")
+  the_choice=$(yesnoskip_prompt "${msg}")
   if [[ "${the_choice}" == "y" ]]; then
     R2G2P_GHUB_CLOBBER_CERTIFIED=true
     return 0
@@ -1007,7 +1007,7 @@ build_dist () {
 
 # ###
 
-upload_prompt () {
+yesnoskip_prompt () {
   local the_ask="$1"
   >&2 echo
   >&2 echo -n "Please yes/No/skip: ${the_ask}? [y/N/s] "
@@ -1122,7 +1122,7 @@ git_push_remote_branch_and_tag () {
   local msg
   msg="Push branch ‘${R2G2P_BRANCH}’ & tag ‘${RELEASE_VERSION}’ to ‘${R2G2P_REMOTE}’"
   local the_choice
-  the_choice=$(upload_prompt "${msg}")
+  the_choice=$(yesnoskip_prompt "${msg}")
   [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
 
   local remote_commit
@@ -1152,7 +1152,7 @@ github_release_release () {
   ${R2G2P_GHUB_RELEASE_NO_UPLOAD} && return
   local msg="Upload GitHub release ‘${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}’"
   local the_choice
-  the_choice=$(upload_prompt "${msg}")
+  the_choice=$(yesnoskip_prompt "${msg}")
   [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
 
   echo "GitHub-Release Rel.: ${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}..."
@@ -1202,7 +1202,7 @@ pypitest_upload () {
   # (lb): See pypiprod_upload for thoughts-comment on pros-cons of prompting so much.
   local msg="Upload release ‘${RELEASE_VERSION}’ to ‘*testing* (test.pypi.org)’"
   local the_choice
-  the_choice=$(upload_prompt "${msg}")
+  the_choice=$(yesnoskip_prompt "${msg}")
   [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
   # One could put the username and password in ~/.pypirc and then call, e.g.,
   #
@@ -1247,7 +1247,7 @@ pypiprod_upload () {
   # ne'er take it back! (Well, one can delete it, but not replace it.)
   local msg="Upload release ‘${RELEASE_VERSION}’ to ‘*PRODUCTION* (upload.pypi.org)’"
   local the_choice
-  the_choice=$(upload_prompt "${msg}")
+  the_choice=$(yesnoskip_prompt "${msg}")
   [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
   # DEV: If you find yourself uploading manually or with errors,
   #      you can store the username and password in ~/.pypirc and then, e.g.:
