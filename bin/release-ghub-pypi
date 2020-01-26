@@ -1,0 +1,1545 @@
+#!/bin/bash
+# vim:tw=0:ts=2:sw=2:et:ai
+
+# DEVs: Your project release wrapper script should set these variables.
+setup_project_vars () {
+  >&2 echo
+  >&2 echo "ERROR: This is an example function. It's not meant to be called!"
+  >&2 echo
+  exit 1
+
+  local myproj="my-app"
+  local mypack="my_app"
+
+  PROJECT_PATH=/path/to/${myproj}
+
+  PROJECT_HISTORY=HISTORY.md
+
+  # Used to set R2G2P_GHUSER & R2G2P_GHREPO.
+  #
+  GHUB_DEV_USER=developer
+  GHUB_DEV_REPO=${myproj}
+  GHUB_DEV_PASS=proj/github-employee-GITHUB_TOKEN
+  GHUB_DEV_BRANCH='develop'
+  GHUB_DEV_REMOTE='origin'
+  #
+  GHUB_ORG_USER=organization
+  GHUB_ORG_REPO=${myproj}
+  GHUB_ORG_PASS=proj/github-employer-GITHUB_TOKEN
+  GHUB_ORG_BRANCH='master'
+  GHUB_ORG_REMOTE='upstream'
+
+  PYPI_PROJECT=${myproj}
+  PYPI_PACKAGE=${mypack}
+  #
+  # One could lazily store PyPI.org username & password in ~/.pypirc,
+  # but one is better off using their own password store. Unless we
+  # were to wire this to a CI hook, then I'm not sure what we'd do.
+  PYPI_TEST_USER=organization
+  PYPI_TEST_PASS=proj/pypi-employer-dev
+  #
+  PYPI_PROD_USER=organization
+  PYPI_PROD_PASS=proj/pypi-employer-prod
+
+  VENV_WORKON=release37
+  VENV_PYTHON3=/usr/bin/python3.7
+  VENV_WRAPPER="${HOME}/.local/bin/virtualenvwrapper.sh"
+
+  BASH_XTRACE=false
+  # DEV: Uncomment to see curl and other interesting commands echoed.
+  #  BASH_XTRACE=true
+
+  SKIP_BUILD=${SKIP_BUILD:-false}
+  SKIP_TESTS=${SKIP_TESTS:-false}
+  SKIP_PROMPTS=${SKIP_PROMPTS:-false}
+}
+
+# ###
+
+source_deps () {
+  source "color_funcs.sh"
+  source "git_util.sh"
+  source "logger.sh"
+}
+
+suss_piping () {
+  # Configures flags to skip prompting if output being piped.
+  # - Since this script normally run interactively and deliberately
+  #   by the DEV, the piped use case is for generating coverage (kcov).
+  #   and maybe in the future for CI tooling, if I (lb) ever decide I
+  #   want to automate the release more (say, push a version tag to
+  #   master on upstream to trigger a GHub + PyPI release, and to email
+  #   self when all said and done).
+  # - E.g.,
+  #   [ -t 1 ] && echo "a tty" > /tmp/ISTTY || echo "! tty" > /tmp/ISTTY
+  [ -t 1 ] || SKIP_PROMPTS=true
+}
+
+# ###
+
+xtrace_beg () {
+  ${BASH_XTRACE} && set -x
+  return 0
+}
+
+xtrace_end () {
+  ${BASH_XTRACE} && set +x
+  return 0
+}
+
+# ###
+
+must_prereqs_system () {
+  local okay=true
+  for cmdname in \
+    curl \
+    git \
+    github-release \
+    jq \
+    pass \
+    python \
+  ; do
+    if ! command -v ${cmdname} > /dev/null; then
+      >&2 echo "ERROR: Missing system command \`${cmdname}\`."
+      okay=false
+    fi
+  done
+  ! ${okay} && return 1
+  return 0
+}
+
+# ***
+
+must_prereqs_virtualenv () {
+  # If already in a virtualenv, code cannot source the wrapper again unless
+  # the ~/.virtualenvs/ path (to `python`, etc.) is removed from PATH, e.g.,
+  #
+  #   PATH=$(echo "${PATH//:/$'\n'}" | grep -v -e "^${HOME}/.virtualenvs/" | tr '\n' ':')
+  #
+  # but that's not necessary, because this script doesn't need to call
+  # workon (or deactivate) if already in a venv.
+  source "${VENV_WRAPPER}"
+
+  local okay=true
+  for cmdname in \
+    mkvirtualenv \
+    workon \
+  ; do
+    if ! command -v ${cmdname} > /dev/null; then
+      >&2 echo "ERROR: Missing virtualenv command \`${cmdname}\`."
+      okay=false
+    fi
+  done
+  ! ${okay} && return 1
+  return 0
+}
+
+# ***
+
+must_prereqs_development () {
+  local okay=true
+  for cmdname in \
+    tox \
+    twine \
+    pep440cmp \
+  ; do
+    if ! command -v ${cmdname} > /dev/null; then
+      >&2 echo "ERROR: Missing virtualenv command \`${cmdname}\`."
+      okay=false
+    fi
+  done
+  ! ${okay} && return 1
+  return 0
+}
+
+# ***
+
+workon_virtualenv () {
+  if [[ ! -f "${VENV_WRAPPER}" ]]; then
+    >&2 echo "ERROR: No virtualenv found at ‘${VENV_WRAPPER}’."
+    return 1
+  fi
+
+  if command -v deactivate; then
+    echo "DEACTIVATE available!"
+  fi
+
+  if [[ -n "${VIRTUAL_ENV}" ]]; then
+    if [[ "$(basename ${VIRTUAL_ENV})" == "${VENV_WORKON}" ]]; then
+      # If DEV ran workon and then ran this script, `deactivate` will not be
+      # declared, but the virtualenv environs will nonetheless be setup properly.
+      echo "Already workingonit: ${VENV_WORKON}"
+      return 0
+    fi
+  fi
+
+  echo "Workinon virtualenv: ${VENV_WORKON}"
+  must_prereqs_virtualenv
+  command -v deactivate >/dev/null 2>&1 && deactivate
+  set +e
+  workon ${VENV_WORKON}
+  set -e
+}
+
+# ###
+
+must_pristine_working () {
+  # This status-porcelain command is not too-unixy: on error, it
+  # sets an environ, rather than returning nonzero.
+  git_status_porcelain . > /dev/null
+  if ${GIT_DIRTY_FILES_FOUND}; then
+    >&2 echo
+    >&2 echo "ERROR: Project working directory not clean! Try:"
+    >&2 echo
+    >&2 echo "   cd ${PROJECT_PATH} && git status"
+    >&2 echo
+    return 1
+  fi
+}
+
+# ***
+
+# (lb): Rather than call the two environments, 'dev' and 'prod', as in
+# 'development' and 'production', I'm calling them 'test' and 'prod' --
+# and not because the latter choices are both the same character width
+# (meaning source code will more likely visually align along columns).
+# Rather, it's because 'dev' and 'prod' is part of the environment *triad*,
+# including 'staging'. And the dev-staging-prod chain is used more when
+# deploying containers, and less so much when publishing source code and
+# distribution packages, where really we just need one place to test
+# our package, and then another place to publicly release it. So by
+# choosing-using 'test', there should be no ambiguity, there's just
+# one 'test' one and 'prod' destination, and nothing more.
+
+setup_environ_vars_dev () {
+  R2G2P_ENVIRON='test'
+  # Use the developer branch and remote.
+  R2G2P_GHUSER="${GHUB_DEV_USER}"
+  R2G2P_GHREPO="${GHUB_DEV_REPO}"
+  R2G2P_GHPASS="${GHUB_DEV_PASS}"
+  R2G2P_BRANCH="${GHUB_DEV_BRANCH}"
+  R2G2P_REMOTE="${GHUB_DEV_REMOTE}"
+  #
+  R2G2P_PPUSER="${PYPI_TEST_USER}"
+  R2G2P_PPPASS="${PYPI_TEST_PASS}"
+}
+
+setup_environ_vars_prod () {
+  R2G2P_ENVIRON='prod'
+  # Use the organization branch and remote.
+  R2G2P_GHUSER="${GHUB_ORG_USER}"
+  R2G2P_GHREPO="${GHUB_ORG_REPO}"
+  R2G2P_GHPASS="${GHUB_ORG_PASS}"
+  R2G2P_BRANCH="${GHUB_ORG_BRANCH}"
+  R2G2P_REMOTE="${GHUB_ORG_REMOTE}"
+  #
+  R2G2P_PPUSER="${PYPI_PROD_USER}"
+  R2G2P_PPPASS="${PYPI_PROD_PASS}"
+}
+
+suss_release_environment_from_branch () {
+  if [[ "${GHUB_ORG_BRANCH}" == "${GHUB_DEV_BRANCH}" ]]; then
+    >&2 echo
+    >&2 echo "ERROR: \$GHUB_ORG_BRANCH == \$GHUB_DEV_BRANCH"
+    >&2 echo
+    return 1
+  fi
+
+  R2G2P_WAS_BRANCH=$(git_checkedout_branch_name 2> /dev/null)
+  if [[ -z "${R2G2P_WAS_BRANCH}" ]]; then
+    >&2 echo
+    >&2 echo "ERROR: Unexpected error fetching branch name!"
+    >&2 echo
+    >&2 git_checkedout_branch_name
+    return 1
+  fi
+
+  if [[ "${R2G2P_WAS_BRANCH}" == "${GHUB_ORG_BRANCH}" ]]; then
+    # I.e., [[ "${R2G2P_WAS_BRANCH}" == 'master' ]]
+    setup_environ_vars_prod
+  else
+    setup_environ_vars_dev
+
+    if [[ "${R2G2P_WAS_BRANCH}" != "${GHUB_DEV_BRANCH}" ]]; then
+      # I.e., [[ "${R2G2P_WAS_BRANCH}" != "develop" ]]
+      if [[ "${R2G2P_WAS_BRANCH}" == "HEAD" ]]; then
+        # Detached head. Need to remember hash, to restore later.
+        R2G2P_WAS_BRANCH="$(git rev-parse HEAD)"
+      fi
+      # git-checkout prints, e.g.,
+      #   Switched to branch 'develop'
+      # possibly also followed by, e.g.,
+      #   Your branch is ahead of 'origin/develop' by 18 commits.
+      #     (use "git push" to publish your local commits)
+      git checkout ${R2G2P_BRANCH} &> /dev/null
+    fi
+  fi
+  R2G2P_COMMIT="$(git rev-parse HEAD)"
+
+  echo "Ready on git branch: ${R2G2P_BRANCH}"
+}
+
+restore_branch_from_before_all_this () {
+  if [[ -n "${R2G2P_WAS_BRANCH}" && "${R2G2P_BRANCH}" != "${R2G2P_WAS_BRANCH}" ]]; then
+    echo "Restored git branch: ${R2G2P_WAS_BRANCH}"
+    git checkout ${R2G2P_WAS_BRANCH} &> /dev/null
+    R2G2P_WAS_BRANCH=
+  fi
+}
+
+# ***
+
+must_environ_github_token () {
+  if [[ -z "${R2G2P_GHPASS}" ]]; then
+    >&2 echo "ERROR: Set the GitHub \`pass\` entries (GHUB_ORG_PASS and GHUB_DEV_PASS)."
+    return 1
+  fi
+
+  GITHUB_TOKEN=$(pass ${R2G2P_GHPASS} | head -1)
+
+  if [[ -z "${GITHUB_TOKEN}" ]]; then
+    >&2 echo "ERROR: Could not read GitHub token from \`pass ${R2G2P_GHPASS}\`."
+    return 1
+  fi
+
+  local trunctok=$(echo ${GITHUB_TOKEN} | sed 's/^\(.\{8\}\).*/\1.../')
+  echo "Loaded GITHUB_TOKEN: ${trunctok}"
+}
+
+must_environ_pypi_password () {
+  if [[ -z "${R2G2P_PPPASS}" ]]; then
+    >&2 echo "ERROR: Set the GitHub \`pass\` entries (GHUB_ORG_PASS and GHUB_DEV_PASS)."
+    return 1
+  fi
+
+  PYPI_PASSWORD=$(pass ${R2G2P_PPPASS} | head -1)
+  PYPI_USERNAME="${R2G2P_PPUSER}"
+
+  if [[ -z "${PYPI_PASSWORD}" ]]; then
+    >&2 echo "ERROR: Could not read PyPI password from \`pass ${R2G2P_PPPASS}\`."
+    return 1
+  fi
+
+  local truncpwd=$(echo ${PYPI_PASSWORD} | sed 's/./X/g')
+  echo "Found PYPI_PASSWORD: ${truncpwd}"
+}
+
+# ***
+
+print_padding () {
+  printf "%${1}s" "$2"
+}
+
+_print_section_break () {
+  local fishes="🐬 🐟 🐋 🐠 🦈 🐡 🐳 🦖 🦖 🦖 🦖 🦖 🦖"
+  # NOTE: Use `wc -m`, not `wc -c`, to count characters, not bytes.
+  local fishch=$(echo -n "${fishes}" | wc -m)
+  # MAGIC: /2 to only pad halfway; and -n subtract a little extra to be leftish.
+  local padcnt=$((($(tput cols) - ${fishch} - 19) / 2))
+  # echo "padcnt: $padcnt / fishch: $fishch"
+  echo
+  echo "$(print_padding ${padcnt} ' ')${fishes}"
+  echo
+}
+
+print_section_break () {
+  local header="$1"
+  _print_section_break
+  [[ -z "${header}" ]] && return
+  local headch=$(echo -n "${header}" | wc -m)
+  # MAGIC: /2 to only pad halfway; and -n subtract a little extra to be leftish.
+  local padcnt=$((($(tput cols) - ${headch} - 5) / 2))
+  echo "$(print_padding ${padcnt} ' ')${header}"
+  _print_section_break
+}
+
+# ---
+
+install_locally () {
+  ${SKIP_BUILD} && return
+  # Ensure the installed version reflects what local path says.
+  if ${BASH_XTRACE}; then
+    print_section_break "make develop"
+    make develop
+    print_section_break
+  else
+    echo "Ensuring up to date: \`make develop\`..."
+    make develop > /dev/null
+  fi
+
+  # Just an overly-helpful (-paranoid) check for required Python packages,
+  # which make-develop may have installed.
+  must_prereqs_development
+}
+
+# ###
+
+json_parse_version () {
+  local resp="$1"
+  local jqry="$2"
+  vers=$(echo "${resp}" | jq -r "${jqry}" 2> /dev/null)
+  # Note that GitHub returns valid JSON if resource not found, e.g.,
+  #   { "message": "Not Found", "documentation_url": ... }
+  # in which case pipeline returns true, and jq echoes "null".
+  if [[ "${vers}" == 'null' ]]; then
+    return 1
+  fi
+  # Trim leading 'v', maybe.
+  # NOTE: In lieu of lookahead assertions, use a negative pre-test thingy.
+  #       I.e., if version start with 'v' and then a digit, remove the 'v';
+  #       otherwise, do not touch it.
+  echo "${vers}" | /bin/sed '/^v[^0-9]/! s/^v//'
+  return 0
+}
+
+curl_latest_version () {
+  local url="$1"
+  local jqry="$2"
+  local curlopts="$3"
+  local resp code
+  xtrace_beg
+  resp=$(eval curl ${curlopts} -s "${url}")
+  code=$?
+  xtrace_end
+  if [[ ${code} -eq 0 ]]; then
+    json_parse_version "${resp}" "${jqry}"
+  else
+    return 1
+  fi
+}
+
+pypi_host_from_deploy_env () {
+  [[ "${1:-$R2G2P_ENVIRON}" == 'test' ]] && echo 'test.' || echo ''
+}
+
+pypi_hint_from_deploy_env () {
+  local pypi_host="$(pypi_host_from_deploy_env $1)"
+  [[ -n "${pypi_host}" ]] && echo " (${pypi_host})" || echo ''
+}
+
+pypi_parse_release () {
+  local resp="$1"
+  # If the current release version is pre-release, it will not be indicated
+  # as the current release, but it will appear in the releases list.
+  local rels_q=".releases[\"${GITHEAD_LATEST_VERSION}\"] | length"
+  local n_rels
+  n_rels=$(echo "${resp}" | jq -r "${rels_q}")
+  [[ ${n_rels} -eq 0 ]] && return 1
+
+  # FIXME/2020-01-25: (lb): Just curious. (Remove this experiment later!)
+  if [[ ${n_rels} -ne 2 ]]; then
+    # Predicting two entries, one for the .whl, and one for the .tar.gz.
+    >&2 echo
+    >&2 echo "INTEREST: PyPI indicates neither 0 nor 2 release items, but ‘${n_rels}’!"
+    >&2 echo
+  fi
+
+  return 0
+}
+
+pypi_latest_version () {
+  local pypi_host="$(pypi_host_from_deploy_env $1)"
+  # E.g.,
+  #   curl -s https://pypi.org/pypi/nark/json | jq -r '.info.version'
+  # NOTE: If you delete a PyPI release (see browser_open_pypi_package_delete_modal),
+  #       the pypi.org JSON response here will not indicate anything about that version.
+  #       Furthermore, if you query that version, e.g.,
+  #         curl http://test.pypi.org/pypi/<project>/<version>/json
+  #       you'll get "301 Moved Permanently", which is just the fuller path:
+  #         curl http://test.pypi.org/pypi/<project>/<version>/json/
+  #       which returns a 404 Not Found.
+  #       - The effect to this script is that the user will get to the PyPI
+  #         upload (pypitest_upload or pypiprod_upload) with no indication
+  #         if a version has yet to be released, or has been deleted. And
+  #         then `twine upload` ends up failing if the version was deleted.
+  # NOTE: PyPI converts underscores to dashes (anecdotal evidence only).
+  local proj_undies="${PYPI_PROJECT/_/-}"
+  # Ref: https://warehouse.readthedocs.io/api-reference/json/
+  local pypi_url="https://${pypi_host}pypi.org/pypi/${proj_undies}/json"
+  local resp code
+  xtrace_beg
+  resp=$(curl -s "${pypi_url}")
+  code=$?
+  xtrace_end
+  if [[ ${code} -eq 0 ]]; then
+    local pub_vers
+    local vers_q='.info.version'
+    pub_vers=$(json_parse_version "${resp}" "${vers_q}")
+    if ! pypi_parse_release "${resp}"; then
+      echo "${pub_vers}"
+      return 0
+    fi
+    # There's a pre-release available for the current tag version,
+    # so consider that the PyPI version...
+    echo "${GITHEAD_LATEST_VERSION}"
+    # ... but also do a quick sanity check.
+    pep440cmp ${pub_vers} le ${GITHEAD_LATEST_VERSION} > /dev/null && return 0
+    >&2 echo
+    >&2 echo "ERROR: Public PyPI version is greater than pre-release you want to release."
+    >&2 echo
+    >&2 echo "    .info.version...  ${pub_vers}"
+    >&2 echo "    .releases[tag]..  ${GITHEAD_LATEST_VERSION}"
+    >&2 echo
+    return 1
+  else
+    return 1
+  fi
+}
+
+ghub_latest_version () {
+  local gh_user="${1:-$R2G2P_GHUSER}"
+  local gh_repo="${2:-$R2G2P_GHREPO}"
+  # E.g.,
+  #   curl -s https://api.github.com/repos/hotoffthehamster/nark/releases/latest \
+  #   | jq -r '.tag_name'
+  # NOTE: Use token to avoid rate-limiting (or at least increase ceiling).
+  curl_latest_version \
+    "https://api.github.com/repos/${gh_user}/${gh_repo}/releases/latest" \
+    '.tag_name' \
+    "-H 'Authorization: token ${GITHUB_TOKEN}'" \
+    || return 0
+}
+
+# ***
+
+setuppy_latest_version () {
+  # Returns the version based on the latest git tag.
+  # - If the git tag is on HEAD, the version is unaltered, e.g.,
+  #       3.0.1
+  # - If the git tag is on a previous commit, the version is, e.g.,
+  #       3.0.0a78.dev6+g18fa807
+  # This fails if not setup.py in current directory.
+  # This returns the last tag applied! I.e., if more than one tag on latest commit...
+  python setup.py --version 2> /dev/null && return
+  >&2 echo "Local Project Missing ‘$(pwd)/setup.py’"
+  return 1
+}
+
+# ***
+
+githead_latest_version () {
+  # The git_versions_tagged_for_commit command calls something like, e.g.,
+  #
+  #   git show-ref --tags -d \
+  #     | grep "^7ca83ee7.* refs/tags/v\?[0-9] \
+  #     | sed -e 's#.* refs/tags/v?##' -e 's/\^\{\}//'
+  local commits_tags="$(git_versions_tagged_for_commit)"
+  if [[ -z "${commits_tags}" ]]; then
+    >&2 echo "ERROR: No [v]ersion tags on latest commit for branch ‘${R2G2P_BRANCH}’."
+    >&2 echo
+    # The setuptools-reported version includes the commit distance and hash, e.g.,
+    #   3.0.0a78.dev6+g18fa807
+    # and also increments the patch or pre-release part.
+    local patch_bump="$( \
+      echo ${SETUPPY_LATEST_VERSION} \
+      | /bin/sed 's/^\([^.]\+\.[^.]\+\.[^.]\+\).*/\1/' \
+    )"
+    >&2 echo "  Depending on which part of the version you want to bump"
+    >&2 echo "  (major, minor, patch, or pre-release), you could, e.g.,"
+    >&2 echo
+    >&2 echo "    git tag -a ${patch_bump} -m \"Version: ${patch_bump}\" ${R2G2P_BRANCH}"
+    >&2 echo
+    >&2 echo "  A reminder that you can just as easily remove the tag locally, e.g.,"
+    >&2 echo
+    >&2 echo "    git tag -d ${patch_bump} ${R2G2P_BRANCH}"
+    >&2 echo
+    >&2 echo "  If you're curious what tags are in use remotely, try:,"
+    >&2 echo
+    >&2 echo "    git ls-remote --tags ${R2G2P_REMOTE}"
+    >&2 echo
+    return 1
+  fi
+
+  local n_tags=$(echo "${commits_tags}" | wc -l)
+  if [[ "${n_tags}" -ne 1 ]]; then
+    >&2 echo "ERROR: More than 1 tag (${n_tags}) on latest commit for ‘${R2G2P_BRANCH}’."
+    >&2 echo
+    # NOTE: I tried both
+    #         | paste -sd '🐙' -
+    #       and
+    #         | tr '\n' '🐙'
+    #       but both did not Unicode, e.g.
+    #         ...�...�...
+    #       thankfully awk works. Otherwise
+    #       I was about to give up searching
+    #       for a way.
+    #
+    # MAGIC: 6 bytes: 2 spaces, and the 4-byte Unicode, U+1F419 OCTOpus/OCTOthorpe #tag.
+    >&2 echo " Tags: $(echo "${commits_tags}" | awk 'ORS=" 🐙 "' | head -c -6)"
+    >&2 echo
+    return 1
+  fi
+
+  echo -n "${commits_tags}"
+}
+
+# ***
+
+must_match_setuptools_and_commithead_versions () {
+  [[ "${SETUPPY_LATEST_VERSION}" == "${GITHEAD_LATEST_VERSION}" ]] && return
+  >&2 echo
+  # (lb): Both considered SCM because setup.py uses setuptools_scm,
+  #   which in turns pulls from the local git (or whatever) repo.
+  >&2 echo "ERROR: SCM Versions unexpectedly do not match!"
+  >&2 echo
+  >&2 echo "    setup.py -V....  ${SETUPPY_LATEST_VERSION}"
+  >&2 echo "    git show-ref...  ${GITHEAD_LATEST_VERSION}"
+  >&2 echo
+  return 1
+}
+
+# ***
+
+python_get_distribution () {
+  local pkgname="${1:-$PYPI_PROJECT}"
+  /usr/bin/env python -c \
+    "from pkg_resources import get_distribution; \
+     print(get_distribution('${pkgname}').version);"
+}
+
+must_new_release_eq_get_distribution () {
+  # NOTE: Because we ran `make develop`, the local distribution version matches, too.
+  local user_distribution_version=$(python_get_distribution)
+  [[ "${user_distribution_version}" == "${RELEASE_VERSION}" ]] && return
+  >&2 echo
+  >&2 echo "ERROR: Release and Installed Versions unexpectedly do not match!"
+  >&2 echo
+  >&2 echo "    setuptools......  ${RELEASE_VERSION}"
+  >&2 echo "    pkg_resources...  ${user_distribution_version}"
+  >&2 echo
+  return 1
+}
+
+# ***
+
+death_and_die () {
+  >&2 echo
+  >&2 echo "ERROR: Death!"
+  trap - EXIT
+  exit 44
+}
+
+warn_new_release_eq_pypi_latest () {
+  # Because one cannot remove a release from PyPI once it's uploaded,
+  # if the latest PyPI version is the same version as that indicated
+  # by HEAD's tag, we gotta bail. Tell the user to generate a new tag
+  # with a greater version.
+  local pypi_version="$1"
+  [[ "${pypi_version}" != "${RELEASE_VERSION}" ]] && return
+  local pypi_env_hint="$(pypi_hint_from_deploy_env $2)"
+  echo
+  echo "🚨 ATTENTION 🚨: Said version already released to PyPI!"
+  echo
+  echo "    setuptools......  ${RELEASE_VERSION}"
+  echo "    pypi.org/pypi...  ${pypi_version}${pypi_env_hint}"
+  echo
+  echo "You can delete this release manually, but you cannot replace it!"
+  echo
+  echo -n "Would you still like to proceed? [y/N/d] "
+  # USER_PROMPT
+  local the_choice
+  ${SKIP_PROMPTS} && the_choice='y' || read -e the_choice
+  the_choice="${the_choice,,}"  # lower.
+  if [[ ${the_choice} != "y" && ${the_choice} != "d" ]]; then
+    death_and_die
+  fi
+  [[ "${the_choice}" == "y" ]] && return 0
+  browser_open_pypi_package_delete_modal
+  echo "You can take it from here! Good luck!!"
+  exit 0
+}
+
+must_new_release_gt_pypi_latest () {
+  local pypi_version="$1"
+  local pypi_env_hint="$(pypi_hint_from_deploy_env $2)"
+  # For sanity's sake, check PyPI version is less than the new release.
+  [[ -z "${pypi_version}" ]] && return
+  pep440cmp ${pypi_version} le ${RELEASE_VERSION} > /dev/null && return
+  >&2 echo
+  >&2 echo "ERROR: It's an upside down world: PyPI versioned later than local!"
+  >&2 echo
+  >&2 echo "    setuptools......  ${RELEASE_VERSION}"
+  >&2 echo "    pypi.org/pypi...  ${pypi_version}${pypi_env_hint}"
+  >&2 echo
+  return 1
+}
+
+# ***
+
+must_new_release_eq_ghub_latest () {
+  local ghub_latest_version="$1"
+  [[ "${ghub_latest_version}" == "${RELEASE_VERSION}" ]] && return
+  >&2 echo
+  >&2 echo "ERROR: It's an upside down world: GitHub versioned later than local!"
+  >&2 echo
+  >&2 echo "    setuptools......  ${RELEASE_VERSION}"
+  >&2 echo "    api.github.com..  ${ghub_latest_version}"
+  >&2 echo
+  return 1
+}
+
+must_confirm_replace_ghub_latest () {
+  local ghub_latest_version="$1"
+  echo
+  echo "🚨 ATTENTION 🚨: Said version already released to GitHub."
+  echo
+  echo "    setuptools......  ${RELEASE_VERSION}"
+  echo "    api.github.com..  ${ghub_latest_version}"
+#  # echo
+#  # echo -n "Would you like to delete the old release from GitHub? [y/N] "
+#  # # USER_PROMPT
+#  # local the_choice
+#  # read the_choice
+#  # if [[ ${the_choice} == "y" || ${the_choice} == "Y" ]]; then
+  local msg="Would you like to delete the old release from GitHub?"
+  local the_choice
+  the_choice=$(upload_prompt "${msg}")
+  if [[ "${the_choice}" == "y" ]]; then
+    R2G2P_GHUB_CLOBBER_CERTIFIED=true
+    return 0
+  fi
+  R2G2P_GHUB_RELEASE_NO_UPLOAD=true
+}
+
+must_github_release_delete_old () {
+  ! ${R2G2P_GHUB_CLOBBER_CERTIFIED} && return
+  local grd_args="-u ${R2G2P_GHUSER} -r ${R2G2P_GHREPO} --tag ${RELEASE_VERSION}"
+  echo "Deleting GitHub Rel: \`${grd_args}\`"
+  xtrace_beg
+  GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    github-release delete ${grd_args}
+  xtrace_end
+}
+
+must_new_release_ge_ghub_latest () {
+  # Check if re-releasing GitHub, or if unknown state (where GitHub version > release).
+  local ghub_latest_version="$1"
+
+  R2G2P_GHUB_CLOBBER_CERTIFIED=false
+  R2G2P_GHUB_RELEASE_NO_UPLOAD=false
+
+  [[ -z "${ghub_latest_version}" ]] && return
+
+  pep440cmp ${ghub_latest_version} lt ${RELEASE_VERSION} > /dev/null && return
+
+  # GitHub version either equal to (sane) or greater than (confusing) release version.
+  must_new_release_eq_ghub_latest "${ghub_latest_version}"
+
+  must_confirm_replace_ghub_latest "${ghub_latest_version}"
+  must_github_release_delete_old
+}
+
+# ***
+
+must_ghub_latest_ge_pypi_latest () {
+  # One final version sanity check.
+  local pypi_latest_version="$1"
+  local ghub_latest_version="$2"
+  local pypi_env_hint="$(pypi_hint_from_deploy_env $3)"
+  [[ -z "${pypi_latest_version}" ]] && return
+  [[ -z "${ghub_latest_version}" ]] && return
+  [[ "${pypi_latest_version}" == "${ghub_latest_version}" ]] && return
+  pep440cmp ${pypi_latest_version} lt ${ghub_latest_version} > /dev/null && return
+  # (lb): Not the biggest error, but might be symptom of bigger problem, so die.
+  >&2 echo
+  >&2 echo "ERROR: It's an upside down world: PyPI versioned later than GitHub!"
+  >&2 echo
+  >&2 echo "    pypi.org/pypi...  ${pypi_latest_version}${pypi_env_hint}"
+  >&2 echo "    api.github.com..  ${ghub_latest_version}"
+  >&2 echo
+  return 1
+}
+
+# ***
+
+query_latest_versions () {
+  # Retrieves and prints versions from: PyPI, GitHub releases, and gleaned locally.
+
+  # Query the version from the git tags of the local working directory.
+  SETUPPY_LATEST_VERSION="$(setuppy_latest_version)"
+  # The `python setup.py --version` returns the version of the last tag applied. I.e.,
+  # if you apply more than 1 version tag to HEAD, setup.py -V returns the most recent.
+  # Here we check that there's only one version tag applied to the latest commit.
+  GITHEAD_LATEST_VERSION="$(githead_latest_version)"
+
+  # Query the versions on PyPI production and testing.
+  PYPI_TEST_VERSION="$(pypi_latest_version 'test')"
+  PYPI_PROD_VERSION="$(pypi_latest_version 'prod')"
+
+  # Query the versions of GitHub releases (for developer and organization accounts).
+  GHUB_DEV_VERSION="$(ghub_latest_version ${GHUB_DEV_USER} ${GHUB_DEV_REPO})"
+  GHUB_ORG_VERSION="$(ghub_latest_version ${GHUB_ORG_USER} ${GHUB_ORG_REPO})"
+
+  # ***
+
+  local pypi_test_vers=${PYPI_TEST_VERSION:-n/a}
+  info "$(attr_italic)test$(reset_italic).PyPI Pkg. Vers: ${pypi_test_vers}"
+
+  local pypi_prod_vers=${PYPI_PROD_VERSION:-n/a}
+  info "PyPI $(attr_italic)Prod$(reset_italic) Pkg. Vers: ${pypi_prod_vers}"
+
+  # ***
+
+  local ghub_dev_vers=${GHUB_DEV_VERSION:-n/a}
+  info "GHub $(attr_underline)DEV$(reset_underline)eloper Rel.: ${ghub_dev_vers}"
+
+  local ghub_org_vers=${GHUB_ORG_VERSION:-n/a}
+  info "GHub $(attr_underline)ORG$(reset_underline)aniz’n Rel.: ${ghub_org_vers}"
+
+  # ***
+
+  info "setuptools' Version: ${SETUPPY_LATEST_VERSION}"
+
+  info "Branch Head Version: ${GITHEAD_LATEST_VERSION}"
+}
+
+# ***
+
+must_determine_release_version () {
+  # Die if `setup.py -V` version differs from version tag gleaned from HEAD.
+  must_match_setuptools_and_commithead_versions
+
+  # Use the HEAD tag as the release version.
+  #
+  # - We've verified that HEAD's tag and `setup.py -V` match,
+  #   so we can use either variable:
+  #     RELEASE_VERSION="${GITHEAD_LATEST_VERSION}"
+  #     RELEASE_VERSION="${SETUPPY_LATEST_VERSION}"
+  RELEASE_VERSION="${GITHEAD_LATEST_VERSION}"
+}
+
+# ***
+
+must_reconcile_latest_versions () {
+  # (Sanity) Check the HEAD tag's version matches the Python package version.
+  # (Really just a paranoid check that `make develop` worked as expected.)
+  must_new_release_eq_get_distribution
+
+  local pypi_latest_version
+  local ghub_latest_version
+  if [[ "${R2G2P_ENVIRON}" == 'test' ]]; then
+    pypi_latest_version="${PYPI_TEST_VERSION}"
+    ghub_latest_version="${GHUB_DEV_VERSION}"
+  elif [[ "${R2G2P_ENVIRON}" == 'prod' ]]; then
+    pypi_latest_version="${PYPI_PROD_VERSION}"
+    ghub_latest_version="${GHUB_ORG_VERSION}"
+  fi
+
+  # Verify that the release version follows the latest PyPI release version
+  # (because PyPI releases are immutable and cannot be removed or overwritten).
+  warn_new_release_eq_pypi_latest "${pypi_latest_version}"
+  must_new_release_gt_pypi_latest "${pypi_latest_version}"
+
+  # Unlike PyPI, a GitHub release version can be removed and overwritten.
+  # So here we just do a sanity check that at least the GitHub version is
+  # the same or less than the new release version.
+  must_new_release_ge_ghub_latest "${ghub_latest_version}"
+
+  # Complete the version sanity checks, this one that ghub >= pypi.
+  must_ghub_latest_ge_pypi_latest "${pypi_latest_version}" \
+                                  "${ghub_latest_version}"
+
+  # Now we know: local release version >= latest GitHub version >= PyPI latest.
+}
+
+# ###
+
+parse_release_blurb_from_history_docs_md () {
+  local section
+  local pattern
+  local release_text
+  section=0
+  pattern='^## .*$'
+  local release_text=$(
+    cat "${PROJECT_HISTORY}" \
+    | while IFS= read -r line; do
+        if [[ $line =~ $pattern ]]; then
+            section=$((section + 1))
+        fi
+        if [[ $section -eq 1 ]]; then
+            printf '%s\n' "$line"
+        fi
+    done
+  )
+  # Convert |foo|_ to ``foo``.
+  #   # release_text=$(echo "$release_text" | sed -e 's/\|([^\|]+)\|_/\`\`\1\`\`/')
+  # Or better yet, put the .. |foo| definition in the latest release section.
+  echo "${release_text}"
+}
+
+# ---
+
+prompt_verify_release_blurb () {
+  # Prompt about the HISTORY snippet, but not if not uploading to GitHub.
+  ${R2G2P_GHUB_RELEASE_NO_UPLOAD} && return
+  print_section_break
+
+  # MEH/2020-01-19: (lb): How difficult/strict you wanna make this?
+  # E.g., would it be to much to expect the first line to look like
+  # the following, and to have the appropriate version?:
+  #
+  #      ## 3.0.0rc1 (2020-01-18)
+  #
+  # For now, let's just warn if the versions don't align.
+  if ! echo "${RELEASE_TEXT}" \
+     | head -1 \
+     | grep "## ${RELEASE_VERSION} (" > /dev/null\
+  ; then
+    local history_version
+    history_version=$(
+      echo "${RELEASE_TEXT}" | head -1 | /bin/sed -e 's/^## \([^ ]\+\).*$/\1/'
+    )
+    warn "WARNING: Release text version does not match tag!"
+    warn "           ${history_version} != ${RELEASE_VERSION}"
+  fi
+
+  echo "${RELEASE_TEXT}"
+  print_section_break
+  echo -n "Does this release copy look okay? [Y/n] "
+  # USER_PROMPT
+  ${SKIP_PROMPTS} && YES_OR_NO='y' || read -e YES_OR_NO
+  if [[ ${YES_OR_NO^^} =~ ^Y.* || -z ${YES_OR_NO} ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
+# ***
+
+# DEV: You can skip this function at runtime with SKIP_TESTS=true.
+# DEV: You should define this function in your project release wrapper.
+project_double_check_make_docs_lint_and_tests () {
+  # A preliminary `make develop` was called earlier, during install_locally, to
+  # ensure the local package version reflects the working directory's setup.py.
+  #
+  # Now we double-check user rans checks and tests -- and that they all passed!!
+  # Because `set -e`, if any of these commands fail, so does this script.
+  #
+  # Well, they would, or will, from the user's project override.
+  # Here we complain if the project does not supply their own.
+  >&2 echo
+  >&2 echo "WARNING: Your project does not override this function!"
+  >&2 echo
+}
+
+double_check_make_docs_lint_and_tests () {
+  ${SKIP_TESTS} && return
+  # Ensure the installed version reflects what local path says.
+  if ${BASH_XTRACE}; then
+    project_double_check_make_docs_lint_and_tests
+  else
+    echo
+    echo "Running project-specific checks & tests: \`make ...\`..."
+    echo
+    # MAYBE/2020-01-25: (lb): This takes a while, so maybe don't toss output.
+    project_double_check_make_docs_lint_and_tests > /dev/null
+  fi
+}
+
+# ***
+
+build_dist () {
+  ${SKIP_BUILD} && return
+  if ${BASH_XTRACE}; then
+    print_section_break "make dist"
+    make dist
+    print_section_break
+  else
+    echo "Build distributable: \`make dist\`..."
+    make dist > /dev/null
+  fi
+}
+
+# ###
+
+upload_prompt () {
+  local the_ask="$1"
+  >&2 echo
+  >&2 echo -n "Please yes/No/skip: ${the_ask}? [y/N/s] "
+  # USER_PROMPT
+  local the_choice
+  ${SKIP_PROMPTS} && the_choice='s' || read -e the_choice
+  the_choice="${the_choice,,}"  # lower.
+  # We could consider just the first character:
+  #   the_choice=${the_choice:0:1}
+  # or just demand a one-character response.
+  if [[ ${the_choice} != "y" && ${the_choice} != "s" ]]; then
+    death_and_die
+  fi
+  echo "${the_choice}"
+}
+
+# ***
+
+github_release_info () {
+  local rel_vers="${1:-$RELEASE_VERSION}"
+  xtrace_beg
+  # Getting release info the hard way.
+  local response
+  response=$( \
+    curl \
+      --header "Authorization: token ${GITHUB_TOKEN}" \
+      --header "Accept: application/json" \
+        https://api.github.com/repos/${R2G2P_GHUSER}/${R2G2P_GHREPO}/releases/tags/${rel_vers}
+  )
+  xtrace_end
+  # It's a big JSON blob. Nothing is really interesting. Maybe the dates, e.g.,
+  #   "created_at": "2020-01-19T03:24:50Z",
+  #   "published_at": "2020-01-19T03:47:43Z",
+  echo
+  echo "GitHub Release Info fetched for: \`${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}\`"
+  echo
+  echo -n "reponse.message: "
+  echo "${response}" | jq '.message'
+  echo "${response}" | grep "created_at" || true
+  echo "${response}" | grep "published_at" || true
+}
+
+# ***
+
+github_purge_release_and_tags_of_same_name () {
+  # Reentrant support: If previously tagged and released, remove the
+  # GitHub release if user wants, and remove tag from remote if points
+  # to different commit and user approves.
+
+  # See also, for a list of all tags, e.g.,:
+  #   git ls-remote --tags origin
+  # Note that we can restrict to tags with a fuller path, or with an --option.
+  #   git ls-remote ${R2G2P_REMOTE} refs/tags/${RELEASE_VERSION}
+  #   git ls-remote ${R2G2P_REMOTE} --tags ${RELEASE_VERSION}
+  #   git ls-remote ${R2G2P_REMOTE} --tags refs/tags/${RELEASE_VERSION}
+  # NOTE: This call takes a moment. (lb): Must be contacting the remote?
+  # NOTE: Use default `cut` delimiter, TAB.
+  local remote_tag_hash
+  remote_tag_hash="$(git ls-remote --tags ${R2G2P_REMOTE} ${RELEASE_VERSION} | cut -f1)"
+
+  local tag_commit_hash
+  R2G2P_DO_PUSH_TAG=false
+  if [[ -z "${remote_tag_hash}" ]]; then
+    R2G2P_DO_PUSH_TAG=true
+  else
+    tag_commit_hash="$(git rev-list -n 1 ${remote_tag_hash})"
+    if [[ "${tag_commit_hash}" == "${R2G2P_COMMIT}" ]]; then
+      # The remote tag has the same commit hash as the current release.
+      # No need to send tag again, unless clobbering GitHub release,
+      # in which case remove the tag, which removes the lightweight (non-annotated)
+      # release from https://github.com/user/repo/releases that's automatically
+      # generated according to tags ((lb): or whatever; I'm not quite sure how
+      # it works, just that deleting the tag clears the entry).
+      ${R2G2P_GHUB_CLOBBER_CERTIFIED} && R2G2P_DO_PUSH_TAG=true
+    else
+      echo
+      echo "🚨 ATTENTION 🚨: The tag on ‘${R2G2P_REMOTE}’ refers to a different commit."
+      echo
+      echo "    release tag ref.  ${R2G2P_COMMIT}"
+      echo "    remote tag ref..  ${tag_commit_hash}"
+      echo
+      echo -n "Would you like to delete the old remote tag? [y/N] "
+      # USER_PROMPT
+      ${SKIP_PROMPTS} && the_choice='n' || read -e the_choice
+      if [[ ${the_choice} == "y" || ${the_choice} == "Y" ]]; then
+        R2G2P_DO_PUSH_TAG=true
+      else
+        >&2 echo
+        >&2 echo "ERROR: Tag ‘${RELEASE_VERSION}’ mismatch on ‘${R2G2P_REMOTE}’."
+        >&2 echo
+        return 1
+      fi
+    fi
+  fi
+
+  if ${R2G2P_DO_PUSH_TAG} && [[ -n "${tag_commit_hash}" ]]; then
+    # (lb): I realize there's a less obtuse syntax to delete tags, e.g.,
+    #           git push --delete ${R2G2P_REMOTE} ${RELEASE_VERSION}
+    #       But that syntax might also delete a branch of the same name.
+    #       So be :obtuse, and be specific about what's being deleted.
+    local gpr_args="${R2G2P_REMOTE} :refs/tags/${RELEASE_VERSION}"
+    echo "Deleting Remote Tag: \`${gpr_args}\`"
+    xtrace_beg
+    git push ${gpr_args}
+    xtrace_end
+  fi
+}
+
+# ***
+
+git_push_remote_branch_and_tag () {
+  local msg
+  msg="Push branch ‘${R2G2P_BRANCH}’ & tag ‘${RELEASE_VERSION}’ to ‘${R2G2P_REMOTE}’"
+  local the_choice
+  the_choice=$(upload_prompt "${msg}")
+  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+
+  local remote_commit
+  remote_commit="$(git ls-remote --heads ${R2G2P_REMOTE} ${R2G2P_BRANCH} | cut -f1)"
+  if [[ "${remote_commit}" != "${R2G2P_COMMIT}" ]]; then
+    local gpr_args="${R2G2P_REMOTE} ${R2G2P_BRANCH}:${R2G2P_BRANCH}"
+    echo "Git Push Remote Br.: \`${gpr_args}\`"
+    xtrace_beg
+    git push ${gpr_args}
+    xtrace_end
+  fi
+
+  if ${R2G2P_DO_PUSH_TAG}; then
+    # Do not push all tags, which could include your private branch tags!
+    #   # NOPE: git push upstream --tags
+    local gpr_args="${R2G2P_REMOTE} refs/tags/${RELEASE_VERSION}"
+    echo "Git Push Remote Tag: \`${gpr_args}\`"
+    xtrace_beg
+    git push ${gpr_args}
+    xtrace_end
+  fi
+}
+
+# ***
+
+github_release_release () {
+  ${R2G2P_GHUB_RELEASE_NO_UPLOAD} && return
+  local msg="Upload GitHub release ‘${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}’"
+  local the_choice
+  the_choice=$(upload_prompt "${msg}")
+  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+
+  echo "GitHub-Release Rel.: ${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}..."
+  xtrace_beg
+  GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    github-release release \
+      --user ${R2G2P_GHUSER} \
+      --repo ${R2G2P_GHREPO} \
+      --tag ${RELEASE_VERSION} \
+      --name "Release: ${RELEASE_VERSION}" \
+      --description "${RELEASE_TEXT}"
+  xtrace_end
+
+  github_release_info
+
+  # (lb): There's really no reason to upload the wheel file.
+  # And no reason not to. I think I'm inclined to do so just
+  # to be complete.
+  local wheel_file
+  wheel_file="dist/${PYPI_PROJECT}-${RELEASE_VERSION}-py3-none-any.whl"
+  if [[ -f "${wheel_file}" ]]; then
+    xtrace_beg
+    #  -n, --name     Name of the file (*)
+    #  -l, --label    Label (description) of the file
+    #  -f, --file     File to upload (use - for stdin) (*)
+    #  -R, --replace  Replace asset with same name if it already exists (WARNING:
+    #                 not atomic, failure to upload will remove the original asset too)
+    GITHUB_TOKEN="${GITHUB_TOKEN}" \
+      github-release upload \
+        --user ${R2G2P_GHUSER} \
+        --repo ${R2G2P_GHREPO} \
+        --tag ${RELEASE_VERSION} \
+        --name "$(basename ${wheel_file})" \
+        --file "${wheel_file}"
+    xtrace_end
+  fi
+}
+
+# ***
+
+# Ref:
+#
+#   https://packaging.python.org/guides/using-testpypi/
+
+pypitest_upload () {
+  [[ "${PYPI_TEST_VERSION}" == "${RELEASE_VERSION}" ]] && return
+  # (lb): See pypiprod_upload for thoughts-comment on pros-cons of prompting so much.
+  local msg="Upload release ‘${RELEASE_VERSION}’ to ‘*testing* (test.pypi.org)’"
+  local the_choice
+  the_choice=$(upload_prompt "${msg}")
+  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+  # One could put the username and password in ~/.pypirc and then call, e.g.,
+  #
+  #   twine upload -r pypitest dist/*
+  #
+  # but we've already got `pass` wired for the GitHub token, and it's more
+  # secure (best practices) to get passwords from the pass store. So that's
+  # how it is!
+  #
+  # To avoid password prompt, cannot run bare command, e.g.,
+  #     twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+  # But rely instead on using ~/.pypirc, wherein you can embed the PWD (shhhh):
+  #     twine upload -r pypitest dist/*
+  xtrace_beg
+  TWINE_USERNAME="${PYPI_USERNAME}" \
+  TWINE_PASSWORD="${PYPI_PASSWORD}" \
+    twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+  xtrace_end
+  # NOTE: PyPI-test is never reset, and you cannot reuse filenames.
+  #       So you might want to burn through alpha or pre-release tags/versions
+  #       if you're, say, developing this script (and running it often).
+  # NOTE: As mentioned in pypi_latest_version, not sure there's a way to know
+  #       if a version number has been released to PyPI and then deleted,
+  #       because fetching version of deleted release same as fetching version
+  #       of non-existent release. So what happens is that `twine upload`
+  #       fails if the version number was previously deleted, and user sees:
+  #           HTTPError: 400 Client Error:
+  #             This filename has already been used, use a different version.
+  #               See https://test.pypi.org/help/#file-name-reuse for url:
+  #                 https://test.pypi.org/legacy/
+}
+
+# ***
+
+pypiprod_upload () {
+  [[ "${PYPI_PROD_VERSION}" == "${RELEASE_VERSION}" ]] && return
+  # (lb): To prompt, or not to prompt: Prompts are annoying, but so are making
+  # mistakes, and this script not run very often, and should be run interactively
+  # -- especially because there are no unit tests, just integration tests whenever
+  # you, dear developer run it! -- so I'm in favor of prompting, especially for
+  # this unrecoverable operation, i.e., once a PyPI release is uploaded, one can
+  # ne'er take it back! (Well, one can delete it, but not replace it.)
+  local msg="Upload release ‘${RELEASE_VERSION}’ to ‘*PRODUCTION* (upload.pypi.org)’"
+  local the_choice
+  the_choice=$(upload_prompt "${msg}")
+  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+  # DEV: If you find yourself uploading manually or with errors,
+  #      you can store the username and password in ~/.pypirc and then, e.g.:
+  #
+  #         twine upload -r pypi dist/*
+  #
+  #      or:
+  #
+  #         twine -vvv upload -r pypi dist/*
+  xtrace_beg
+  TWINE_USERNAME="${PYPI_USERNAME}" \
+  TWINE_PASSWORD="${PYPI_PASSWORD}" \
+    twine upload --repository-url https://upload.pypi.org/legacy/ dist/*
+  xtrace_end
+}
+
+# ***
+
+# Smoke test PyPI releases.
+
+smoke_test_pypi_environment () {
+  local pypi_env="$1"
+  local expect_ver="$2"
+  local install_pre="$3"
+  local pip_search_index="$4"
+  local pip_install_indices="$5"
+
+  print_section_break "Smoke testing environment — ‘${pypi_env}’"
+
+  # This function is meant to be run on its own, so calling setup methods.
+  # NOTE: Your projects 'release' that's sourced after this script should
+  #       define its own 'setup_project_vars' function (so we're not calling
+  #       the one defined above, but a project-specific one).
+  setup_project_vars
+  if [[ "${pypi_env}" == 'test' ]]; then
+    setup_environ_vars_dev
+  elif [[ "${pypi_env}" == 'prod' ]]; then
+    setup_environ_vars_prod
+  fi
+
+  # Need to deactivate before sourcing, lest error from active virtual env, e.g.,
+  #   /home/user/.virtualenvs/dob37/bin/python:
+  #     Error while finding module specification for 'virtualenvwrapper.hook_loader'
+  #       (ModuleNotFoundError: No module named 'virtualenvwrapper')
+  #   ...
+  command -v deactivate >/dev/null 2>&1 && deactivate
+
+  # If DEV runs ./release from virtualenv, scrub PATH so you can re-source wrapper.
+  PATH=$(echo "${PATH//:/$'\n'}" | grep -v -e "^${HOME}/.virtualenvs/" | tr '\n' ':')
+  source "${VENV_WRAPPER}"
+
+  local venv_name="${R2G2P_GHREPO}-pypi-${RELEASE_VERSION}-${pypi_env}"
+  local venv_tdir="$(mktemp -d --suffix=${venv_name})"
+  cd ${venv_tdir}
+
+  print_section_break "Searching pip for ‘${R2G2P_GHREPO}’:"
+  pip search ${pip_search_index} ${R2G2P_GHREPO} |& head -n 3
+
+  print_section_break "(Re)creating virtual environment ‘${venv_name}’:"
+
+  echo "Testing: rmvirtualenv ${venv_name}"
+  echo
+  echo "          # Should fail to find"
+  echo "─────────────────────────────────────────────────────────────────────"
+  echo
+  rmvirtualenv ${venv_name}
+  echo
+
+  echo "Testing: mkvirtualenv --python=${VENV_PYTHON3} \\"
+  echo "          -a $(pwd) \\"
+  echo "          ${venv_name}"
+  echo "─────────────────────────────────────────────────────────────────────"
+  echo
+  mkvirtualenv -a $(pwd) --python=${VENV_PYTHON3} ${venv_name}
+  # mkvirtualenv does an auto-workon.
+  # Already in effect: workon ${venv_name}
+
+  print_section_break "pip-installing ‘${PYPI_PROJECT}’:"
+
+  echo "Testing: python_get_distribution"
+  echo
+  echo "          # Should fail to find"
+  echo "─────────────────────────────────────────────────────────────────────"
+  echo
+  python_get_distribution 2>&1 | tail -1 | grep '^pkg_resources.DistributionNotFound: '
+  echo
+
+  # ***
+
+  smoke_test_cleanup () {
+    local exit_code=$?
+    deactivate
+    rmvirtualenv ${venv_name}
+    echo "ERROR: Smoke test failed! (${exit_code})"
+    exit ${exit_code}
+  }
+  trap smoke_test_cleanup EXIT
+
+  set -e
+
+  echo "Testing: pip install $(echo ${pip_install_indices}) \\"
+  echo "          ${PYPI_PROJECT}"
+  echo "─────────────────────────────────────────────────────────────────────"
+  echo
+  pip install ${install_pre} ${pip_install_indices} ${PYPI_PROJECT} > /dev/null
+
+  print_section_break "Verifying package.__doc__, a simple test all packages should pass!"
+
+  echo "Testing: Verify package docstring"
+  echo "─────────────────────────────────────────────────────────────────────"
+  echo
+  # Returns nonzero on error (which would tickle errexit).
+  /usr/bin/env python -c \
+    "import ${PYPI_PACKAGE}; print(${PYPI_PACKAGE}.__doc__)"
+  echo
+
+  echo "Testing: Verify package version"
+  echo "─────────────────────────────────────────────────────────────────────"
+  echo
+  local install_ver="$(python_get_distribution)"
+  echo "installed version: ${install_ver}"
+
+  set +e
+
+  trap - EXIT
+
+  # ***
+
+  print_section_break "All done! Cleaning up."
+
+  deactivate
+  rmvirtualenv ${venv_name}
+
+  if [[ -n "${expect_ver}" && "${install_ver}" != "${expect_ver}" ]]; then
+    echo
+    >&2 echo "ERROR: [[ ${install_ver} != ${expect_ver} ]]"
+    return 1
+  fi
+
+  print_section_break "Looks good!!"
+
+  echo
+  echo "Smoke testing environment ‘${pypi_env}’ passed!"
+  echo
+}
+
+# ***
+
+_smoke_test_pypitest_release () {
+  # For test index, because of dependencies, must specify both PyPI URLs,
+  #   --index-url and --extra-index-url.
+  smoke_test_pypi_environment 'test' "$1" "$2" \
+    '--index https://test.pypi.org/pypi/' \
+    '--index-url https://test.pypi.org/simple/
+     --extra-index-url https://pypi.org/simple'
+}
+
+_smoke_test_pypiprod_release () {
+  smoke_test_pypi_environment 'prod' "$1" "$2" '' ''
+}
+
+smoke_test_pypi_release_on () {
+  # We could fork easily with $() and run in a subshell, but that delays the
+  # output, e.g., echoing the command, like this:
+  #    echo "$(_smoke_test_pypitest_release)"
+  # causes the output to pause until the command finishes. So we go to the
+  # trouble of invoking a new Bash session, and sourcing files to setup the
+  # necessary environment variables.
+  # Format the function name, e.g., _smoke_test_pypitest_release
+  #                              or _smoke_test_pypiprod_release.
+  local smoke_testing_fcn="_smoke_test_pypi${1}_release"
+
+  local pippre=''
+  pep440cmp is-prerelease ${RELEASE_VERSION} > /dev/null && pippre='--pre'
+
+  # FIXME/2020-01-19: Document how this works: The developer needs to symlink
+  #   this script at '../release' relative to project root.
+  #   And then at project root, the user needs to add a script which
+  #   defines a 'setup_project_vars' of its own.
+  command bash -c " \
+    set -e ; \
+    source ${PROJECT_PATH}/../release ; \
+    source ${PROJECT_PATH}/release ; \
+    set +e ; \
+    ${smoke_testing_fcn} '${RELEASE_VERSION}' '${pippre}' \
+  "
+}
+
+smoke_test_pypitest_release () {
+  smoke_test_pypi_release_on 'test'
+}
+
+smoke_test_pypiprod_release () {
+  smoke_test_pypi_release_on 'prod'
+}
+
+# ***
+
+# FIXME/2020-01-25 05:12: Add looped wait after PyPI upload, because
+# smoke test failing, being run too quickly...
+#   - For now, increased sleep 1.0 → sleep 5.0.
+#   - 2020-01-25 05:22: Nope, 5 was too short...
+#
+pypi_upload_and_smoke_test () {
+  if [[ "${R2G2P_ENVIRON}" == 'test' ]]; then
+    pypitest_upload
+    # sleep 1.0
+    sleep 10.0
+    smoke_test_pypitest_release
+  elif [[ "${R2G2P_ENVIRON}" == 'prod' ]]; then
+    pypiprod_upload
+    # sleep 1.0
+    sleep 10.0
+    smoke_test_pypiprod_release
+  fi
+}
+
+# ###
+
+browser_load_url () {
+  ${SKIP_PROMPTS} && return
+  # Avoid terminal noise, and always redirect output.
+  # Avoid hanging this script, and always background the
+  # process (alternatively, check, say, `pidof ${BROWSER}`
+  # to see if the browser is running or not. But & easier.
+  local url="$1"
+  sensible-browser "${url}" > /dev/null 2>&1 &
+}
+
+browser_open_github_releases () {
+  browser_load_url \
+    "https://github.com/${R2G2P_GHUSER}/${R2G2P_GHREPO}/releases"
+}
+
+browser_open_pypi_package_page () {
+  local pypi_host pypi_page
+  pypi_host="$(pypi_host_from_deploy_env $1)"
+  # We could open the project page, which shows the latest production release:
+  #   pypi_page="https://${pypi_host}pypi.org/project/${R2G2P_GHREPO}/"
+  # But that ignores pre-release versions, so show the release page instead:
+  pypi_page="https://${pypi_host}pypi.org/project/${R2G2P_GHREPO}/${RELEASE_VERSION}/"
+  browser_load_url "${pypi_page}"
+}
+
+browser_open_pypi_package_delete_modal () {
+  local pypi_host="$(pypi_host_from_deploy_env $1)"
+  browser_load_url \
+    "https://${pypi_host}pypi.org/manage/project/${R2G2P_GHREPO}/releases/#delete_release-modal-1"
+}
+
+# ###
+
+release_project () {
+  workon_virtualenv
+
+  cd "${PROJECT_PATH}"
+
+  # ***
+
+  # Demand that git is clean in the working directory.
+  must_pristine_working
+
+  # Change to the appropriate branch, develop or master.
+  suss_release_environment_from_branch
+
+  # Check that there's a GitHub token for the remote.
+  must_environ_github_token
+  # Check that we can load the PyPI password.
+  must_environ_pypi_password
+
+  # Run `make develop` and ensure latest code installed.
+  install_locally
+
+  # ***
+
+  # Query sources for what versions are where, i.e., local, GH release, PyPI.
+  query_latest_versions
+
+  # Ensure that HEAD is tagged with the release version to use.
+  must_determine_release_version
+  # and check if that version released already to GitHub or PyPI.
+  must_reconcile_latest_versions
+
+  github_purge_release_and_tags_of_same_name
+
+  # RELEASE_TEXT="$(parse_release_blurb_from_history_docs_rst)"
+  RELEASE_TEXT="$(parse_release_blurb_from_history_docs_md)"
+  prompt_verify_release_blurb
+
+  # ***
+
+  double_check_make_docs_lint_and_tests
+
+  build_dist
+
+  git_push_remote_branch_and_tag
+
+  github_release_release
+
+  # ***
+
+  # deactivate is defined by workon, but workon was not called if user invoked
+  # this script from within a virtualenv, so do not expect to find deactivate.
+  command -v deactivate >/dev/null 2>&1 && deactivate
+
+  pypi_upload_and_smoke_test
+
+  browser_open_github_releases
+
+  browser_open_pypi_package_page
+
+  restore_branch_from_before_all_this
+}
+
+# ***
+
+errexit_cleanup () {
+  local exit_code=$?
+  restore_branch_from_before_all_this
+  if [[ ${exit_code} -ne 0 && ${exit_code} -ne 44 ]]; then
+    echo "ERROR: release failed! (${exit_code})"
+  fi
+  exit ${exit_code}
+}
+
+# ***
+
+release-ghub-pypi () {
+  trap errexit_cleanup EXIT
+  set -e
+  source_deps
+  suss_piping
+  must_prereqs_system
+  release_project
+  set +e
+  trap - EXIT
+}
+
+# ***
+
+main () {
+  setup_project_vars
+  release-ghub-pypi
+}
+
+if [[ "$0" == "${BASH_SOURCE}" ]]; then
+  main "${@}"
+fi
+
