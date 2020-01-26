@@ -193,7 +193,6 @@ must_prereqs_virtualenv () {
 must_prereqs_development () {
   local okay=true
   for cmdname in \
-    tox \
     twine \
     pep440cmp \
   ; do
