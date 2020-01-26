@@ -1278,6 +1278,15 @@ pypiprod_upload () {
 
 # ***
 
+release_status_user_confirm () {
+  local msg="Confirm release available and commence smoke testing"
+  local the_choice
+  the_choice=$(yesnoskip_prompt "${msg}" "Y")
+  [[ "${the_choice}" != "y" ]] && return 1 || return 0
+}
+
+# ***
+
 # Smoke test PyPI releases.
 
 smoke_test_pypi_environment () {
@@ -1463,16 +1472,20 @@ smoke_test_pypiprod_release () {
 #   - For now, increased sleep 1.0 → sleep 5.0.
 #   - 2020-01-25 05:22: Nope, 5 was too short...
 #
-pypi_upload_and_smoke_test () {
+pypi_upload_release () {
   if [[ "${R2G2P_ENVIRON}" == 'test' ]]; then
     pypitest_upload
-    # sleep 1.0
-    sleep 10.0
-    smoke_test_pypitest_release
   elif [[ "${R2G2P_ENVIRON}" == 'prod' ]]; then
     pypiprod_upload
-    # sleep 1.0
-    sleep 10.0
+  fi
+}
+
+pypi_smoke_test () {
+  ! release_status_user_confirm && return 0
+
+  if [[ "${R2G2P_ENVIRON}" == 'test' ]]; then
+    smoke_test_pypitest_release
+  elif [[ "${R2G2P_ENVIRON}" == 'prod' ]]; then
     smoke_test_pypiprod_release
   fi
 }
@@ -1565,11 +1578,13 @@ release_project () {
   # this script from within a virtualenv, so do not expect to find deactivate.
   command -v deactivate >/dev/null 2>&1 && deactivate
 
-  pypi_upload_and_smoke_test
+  pypi_upload_release
 
   browser_open_github_releases
 
   browser_open_pypi_package_page
+
+  pypi_smoke_test
 
   restore_branch_from_before_all_this
 }
