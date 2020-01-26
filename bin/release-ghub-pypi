@@ -45,10 +45,12 @@ setup_project_vars () {
   VENV_PYTHON3=/usr/bin/python3.7
   VENV_WRAPPER="${HOME}/.local/bin/virtualenvwrapper.sh"
 
-  BASH_XTRACE=false
+  BASH_XTRACE=${BASH_XTRACE:-false}
   # DEV: Uncomment to see curl and other interesting commands echoed.
   #  BASH_XTRACE=true
 
+  # DEV: These are useful when set from CLI, e.g.,
+  #       SKIP_BUILD=true SKIP_TESTS=true ./release
   SKIP_BUILD=${SKIP_BUILD:-false}
   SKIP_TESTS=${SKIP_TESTS:-false}
   SKIP_PROMPTS=${SKIP_PROMPTS:-false}
@@ -60,6 +62,58 @@ source_deps () {
   source "color_funcs.sh"
   source "git_util.sh"
   source "logger.sh"
+}
+
+set_defaults () {
+  BASH_XTRACE=${BASH_XTRACE:-false}
+  SKIP_BUILD=${SKIP_BUILD:-false}
+  SKIP_TESTS=${SKIP_TESTS:-false}
+  SKIP_PROMPTS=${SKIP_PROMPTS:-false}
+}
+
+fail_missing () {
+  local any_missing=false
+  for envname in \
+    PROJECT_PATH \
+    \
+    PROJECT_HISTORY \
+    \
+    GHUB_DEV_USER \
+    GHUB_DEV_REPO \
+    GHUB_DEV_PASS \
+    GHUB_DEV_BRANCH \
+    GHUB_DEV_REMOTE \
+    \
+    GHUB_ORG_USER \
+    GHUB_ORG_REPO \
+    GHUB_ORG_PASS \
+    GHUB_ORG_BRANCH \
+    GHUB_ORG_REMOTE \
+    \
+    PYPI_PROJECT \
+    PYPI_PACKAGE \
+    \
+    PYPI_TEST_USER \
+    PYPI_TEST_PASS \
+    \
+    PYPI_PROD_USER \
+    PYPI_PROD_PASS \
+    \
+    VENV_WORKON \
+    VENV_PYTHON3 \
+    VENV_WRAPPER \
+  ; do
+    if [ -z "${!envname}" ]; then
+      any_missing=true
+      >&2 echo "ERROR: Missing environ: ${envname}"
+    fi
+  done
+  ${any_missing} && return 1 || return 0
+}
+
+ensure_vars () {
+  set_defaults
+  fail_missing
 }
 
 suss_piping () {
@@ -1525,6 +1579,7 @@ release-ghub-pypi () {
   trap errexit_cleanup EXIT
   set -e
   source_deps
+  ensure_vars
   suss_piping
   must_prereqs_system
   release_project
