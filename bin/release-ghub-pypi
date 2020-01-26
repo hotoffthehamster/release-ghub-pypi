@@ -1132,22 +1132,38 @@ github_purge_release_and_tags_of_same_name () {
 
 # ***
 
-git_push_remote_branch_and_tag () {
-  local msg
-  msg="Push branch ‘${R2G2P_BRANCH}’ & tag ‘${RELEASE_VERSION}’ to ‘${R2G2P_REMOTE}’"
-  local the_choice
-  the_choice=$(yesnoskip_prompt "${msg}")
-  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
-
+git_push_remote_branch () {
+  local remote="$1"
+  local branch="$2"
   local remote_commit
-  remote_commit="$(git ls-remote --heads ${R2G2P_REMOTE} ${R2G2P_BRANCH} | cut -f1)"
+  remote_commit="$(git ls-remote --heads ${remote} ${branch} | cut -f1)"
   if [[ "${remote_commit}" != "${R2G2P_COMMIT}" ]]; then
-    local gpr_args="${R2G2P_REMOTE} ${R2G2P_BRANCH}:${R2G2P_BRANCH}"
+    local gpr_args="${remote} ${branch}:${branch}"
     echo "Git Push Remote Br.: \`${gpr_args}\`"
     xtrace_beg
     git push ${gpr_args}
     xtrace_end
   fi
+}
+
+git_push_branch_if_prod_release () {
+  [[ "${R2G2P_ENVIRON}" != 'prod' ]] && return 0
+  git_push_remote_branch "${@}"
+}
+
+git_push_remote_branch_and_tag () {
+  local msg
+  msg="Push branch ‘${R2G2P_BRANCH}’ & tag ‘${RELEASE_VERSION}’ to ‘${R2G2P_REMOTE}’"
+  [[ "${R2G2P_ENVIRON}" == 'prod' ]] && msg="${msg} (et al.)"
+  local the_choice
+  the_choice=$(yesnoskip_prompt "${msg}")
+  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+
+  git_push_remote_branch "${R2G2P_REMOTE}" "${R2G2P_BRANCH}"
+  # Assume developer's repo has the tag but not necessarily the org branch.
+  # And assume the organization's repo has its branch but not the developer's
+  git_push_branch_if_prod_release "${GHUB_DEV_REMOTE}" "${GHUB_ORG_BRANCH}"
+  git_push_branch_if_prod_release "${GHUB_ORG_REMOTE}" "${GHUB_DEV_BRANCH}"
 
   if ${R2G2P_DO_PUSH_TAG}; then
     # Do not push all tags, which could include your private branch tags!
