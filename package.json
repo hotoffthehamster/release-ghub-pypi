@@ -1,0 +1,13 @@
+{
+  "name": "release-ghub-pypi",
+  "version": "0.0.1",
+  "repo": "landonb/release-ghub-pypi",
+  "description": "One developer's particular GitHub and PyPI release workflow, codified",
+  "keywords": ["release", "github", "pypi"],
+  "license": "MIT",
+  "scripts": [
+    "bin/release-ghub-pypi",
+  ],
+  "install": "make install",
+}
+
