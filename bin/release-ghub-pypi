@@ -1,7 +1,10 @@
 #!/bin/bash
 # vim:tw=0:ts=2:sw=2:et:ai
 
+# ***
+
 # DEVs: Your project release wrapper script should set these variables.
+# See the README for details.
 setup_project_vars () {
   >&2 echo
   >&2 echo "ERROR: This is an example function. It's not meant to be called!"
@@ -154,7 +157,11 @@ must_prereqs_system () {
     python \
   ; do
     if ! command -v ${cmdname} > /dev/null; then
-      >&2 echo "ERROR: Missing system command \`${cmdname}\`."
+      # 2020-02-13: I build latest Vim and updated plugins and now
+      #  my shell parser is broken on << }\ >> syntax (touching one
+      #  another) -- the remainder of file looks quoted...
+      # >&2 echo "ERROR: Missing system command \`${cmdname}\`."
+      >&2 echo "ERROR: Missing system command ‘${cmdname}’."
       okay=false
     fi
   done
@@ -181,7 +188,7 @@ must_prereqs_virtualenv () {
     workon \
   ; do
     if ! command -v ${cmdname} > /dev/null; then
-      >&2 echo "ERROR: Missing virtualenv command \`${cmdname}\`."
+      >&2 echo "ERROR: Missing virtualenv command ‘${cmdname}’."
       okay=false
     fi
   done
@@ -198,7 +205,7 @@ must_prereqs_development () {
     pep440cmp \
   ; do
     if ! command -v ${cmdname} > /dev/null; then
-      >&2 echo "ERROR: Missing virtualenv command \`${cmdname}\`."
+      >&2 echo "ERROR: Missing virtualenv command ‘${cmdname}’."
       okay=false
     fi
   done
@@ -352,7 +359,7 @@ must_environ_github_token () {
   GITHUB_TOKEN=$(pass ${R2G2P_GHPASS} | head -1)
 
   if [[ -z "${GITHUB_TOKEN}" ]]; then
-    >&2 echo "ERROR: Could not read GitHub token from \`pass ${R2G2P_GHPASS}\`."
+    >&2 echo "ERROR: Could not read GitHub token from ‘pass ${R2G2P_GHPASS}’."
     return 1
   fi
 
@@ -370,7 +377,7 @@ must_environ_pypi_password () {
   PYPI_USERNAME="${R2G2P_PPUSER}"
 
   if [[ -z "${PYPI_PASSWORD}" ]]; then
-    >&2 echo "ERROR: Could not read PyPI password from \`pass ${R2G2P_PPPASS}\`."
+    >&2 echo "ERROR: Could not read PyPI password from ‘pass ${R2G2P_PPPASS}’."
     return 1
   fi
 
@@ -758,7 +765,7 @@ must_confirm_replace_ghub_latest () {
 must_github_release_delete_old () {
   ! ${R2G2P_GHUB_CLOBBER_CERTIFIED} && return
   local grd_args="-u ${R2G2P_GHUSER} -r ${R2G2P_GHREPO} --tag ${RELEASE_VERSION}"
-  echo "Deleting GitHub Rel: \`${grd_args}\`"
+  echo "Deleting GitHub Rel: ‘${grd_args}’"
   xtrace_beg
   GITHUB_TOKEN="${GITHUB_TOKEN}" \
     github-release delete ${grd_args}
@@ -1056,7 +1063,7 @@ github_release_info () {
   #   "created_at": "2020-01-19T03:24:50Z",
   #   "published_at": "2020-01-19T03:47:43Z",
   echo
-  echo "GitHub Release Info fetched for: \`${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}\`"
+  echo "GitHub Release Info fetched for: ‘${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}’"
   echo
   echo -n "reponse.message: "
   echo "${response}" | jq '.message'
@@ -1123,7 +1130,7 @@ github_purge_release_and_tags_of_same_name () {
     #       But that syntax might also delete a branch of the same name.
     #       So be :obtuse, and be specific about what's being deleted.
     local gpr_args="${R2G2P_REMOTE} :refs/tags/${RELEASE_VERSION}"
-    echo "Deleting Remote Tag: \`${gpr_args}\`"
+    echo "Deleting Remote Tag: ‘${gpr_args}’"
     xtrace_beg
     git push ${gpr_args}
     xtrace_end
@@ -1169,7 +1176,7 @@ git_push_remote_branch_and_tag () {
     # Do not push all tags, which could include your private branch tags!
     #   # NOPE: git push upstream --tags
     local gpr_args="${R2G2P_REMOTE} refs/tags/${RELEASE_VERSION}"
-    echo "Git Push Remote Tag: \`${gpr_args}\`"
+    echo "Git Push Remote Tag: ‘${gpr_args}’"
     xtrace_beg
     git push ${gpr_args}
     xtrace_end
