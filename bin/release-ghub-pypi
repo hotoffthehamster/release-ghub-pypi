@@ -126,7 +126,7 @@ suss_piping () {
   #   self when all said and done).
   # - E.g.,
   #   [ -t 1 ] && echo "a tty" > /tmp/ISTTY || echo "! tty" > /tmp/ISTTY
-  [ -t 1 ] || SKIP_PROMPTS=true
+  ( [ -t 0 ] && [ -t 1 ] ) || SKIP_PROMPTS=true
 }
 
 # ###
