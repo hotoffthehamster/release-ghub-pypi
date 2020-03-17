@@ -6,9 +6,8 @@
 # DEVs: Your project release wrapper script should set these variables.
 # See the README for details.
 setup_project_vars () {
-  >&2 echo
-  >&2 echo "ERROR: This is an example function. It's not meant to be called!"
-  >&2 echo
+  >&2 echo "ERROR: Missing wrapper. Please define your own ‘setup_project_vars’."
+  >&2 echo "- This is an example function. It's not meant to be called!"
   exit 1
 
   local myproj="my-app"
