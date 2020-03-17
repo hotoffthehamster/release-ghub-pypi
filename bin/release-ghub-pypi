@@ -61,10 +61,31 @@ setup_project_vars () {
 # ###
 
 source_deps () {
-  source "color_funcs.sh"
-  source "git_util.sh"
-  source "logger.sh"
+  local depsnok=false
+
+  _source_it () {
+    local file="$1"
+    if [ -f "./deps/${file}" ]; then
+      # E.g., because `bpkg install landonb/release-ghub-pypi`.
+      . "./deps/${file}"
+    elif command -v "${file}" > /dev/null; then
+      # E.g., because on PATH.
+      . "${file}"
+    else
+      >&2 echo "MISSING: ‘${file}’ not found in ./deps or on PATH."
+      depsnok=true
+    fi
+  }
+
+  # https://github.com/landonb/sh-colors
+  _source_it "colors.sh"
+  # https://github.com/landonb/sh-logger
+  _source_it "logger.sh"
+
+  ${depsnok} && exit 1 || return 0
 }
+
+# ###
 
 set_defaults () {
   BASH_XTRACE=${BASH_XTRACE:-false}
@@ -1613,8 +1634,6 @@ browser_open_pypi_package_delete_modal () {
 release_project () {
   workon_virtualenv
 
-  cd "${PROJECT_PATH}"
-
   # ***
 
   # Demand that git is tidy in the working directory.
@@ -1690,8 +1709,9 @@ errexit_cleanup () {
 release-ghub-pypi () {
   trap errexit_cleanup EXIT
   set -e
-  source_deps
   ensure_vars
+  cd "${PROJECT_PATH}"
+  source_deps
   suss_piping
   must_prereqs_system
   release_project

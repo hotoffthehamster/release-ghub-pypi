@@ -9,5 +9,9 @@
     "bin/release-ghub-pypi",
   ],
   "install": "make install",
+  "dependencies": {
+    "landonb/sh-colors": "master",
+    "landonb/sh-logger": "master"
+  }
 }
 
