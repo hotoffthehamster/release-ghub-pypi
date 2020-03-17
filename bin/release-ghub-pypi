@@ -246,7 +246,7 @@ workon_virtualenv () {
 must_pristine_working () {
   if test -n "$(git status --porcelain)"; then
     >&2 echo
-    >&2 echo "ERROR: Project working directory not clean! Try:"
+    >&2 echo "ERROR: Project working directory not tidy! Try:"
     >&2 echo
     >&2 echo "   cd ${PROJECT_PATH} && git status"
     >&2 echo
@@ -1188,6 +1188,9 @@ git_push_branch_if_prod_release () {
 }
 
 git_push_remote_branch_and_tag () {
+  # FIXME/LOPRI/2020-02-02: Check `merge-base --is-ancestor` on each branch
+  #                         and do not bother prompting if all up to date.
+  #                         (We already checked on tag; see: R2G2P_DO_PUSH_TAG.)
   local msg
   msg="Push branch ‘${R2G2P_BRANCH}’ & tag ‘${RELEASE_VERSION}’ to ‘${R2G2P_REMOTE}’"
   [[ "${R2G2P_ENVIRON}" == 'prod' ]] && msg="${msg} (et al.)"
@@ -1364,7 +1367,7 @@ smoke_test_pypi_environment () {
   fi
 
   # Need to deactivate before sourcing, lest error from active virtual env, e.g.,
-  #   /home/user/.virtualenvs/dob37/bin/python:
+  #   /home/user/.virtualenvs/dob3x/bin/python:
   #     Error while finding module specification for 'virtualenvwrapper.hook_loader'
   #       (ModuleNotFoundError: No module named 'virtualenvwrapper')
   #   ...
@@ -1586,7 +1589,7 @@ release_project () {
 
   # ***
 
-  # Demand that git is clean in the working directory.
+  # Demand that git is tidy in the working directory.
   must_pristine_working
 
   # Change to the appropriate branch, develop or master.
