@@ -1,0 +1,8 @@
+# This file exists within 'release-ghub-pypi':
+#
+#   https://github.com/landonb/release-ghub-pypi
+
+# USAGE: `/bin/cp .ignore.example .ignore` and personalize.
+
+.git/
+
