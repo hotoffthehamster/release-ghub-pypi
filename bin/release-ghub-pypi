@@ -244,10 +244,7 @@ workon_virtualenv () {
 # ###
 
 must_pristine_working () {
-  # This status-porcelain command is not too-unixy: on error, it
-  # sets an environ, rather than returning nonzero.
-  git_status_porcelain . > /dev/null
-  if ${GIT_DIRTY_FILES_FOUND}; then
+  if test -n "$(git status --porcelain)"; then
     >&2 echo
     >&2 echo "ERROR: Project working directory not clean! Try:"
     >&2 echo
@@ -297,6 +294,10 @@ setup_environ_vars_prod () {
   R2G2P_PPPASS="${PYPI_PROD_PASS}"
 }
 
+git_branch_name () {
+  git rev-parse --abbrev-ref HEAD
+}
+
 suss_release_environment_from_branch () {
   if [[ "${GHUB_ORG_BRANCH}" == "${GHUB_DEV_BRANCH}" ]]; then
     >&2 echo
@@ -305,12 +306,12 @@ suss_release_environment_from_branch () {
     return 1
   fi
 
-  R2G2P_WAS_BRANCH=$(git_checkedout_branch_name 2> /dev/null)
+  R2G2P_WAS_BRANCH=$(git_branch_name 2> /dev/null)
   if [[ -z "${R2G2P_WAS_BRANCH}" ]]; then
     >&2 echo
     >&2 echo "ERROR: Unexpected error fetching branch name!"
     >&2 echo
-    >&2 git_checkedout_branch_name
+    >&2 git_branch_name
     return 1
   fi
 
@@ -573,6 +574,35 @@ setuppy_latest_version () {
   python setup.py --version 2> /dev/null && return
   >&2 echo "Local Project Missing ‘$(pwd)/setup.py’"
   return 1
+}
+
+# ***
+
+git_versions_tagged_for_commit () {
+  local hash="$1"
+  if [ -z "${hash}" ]; then
+    hash="$(git rev-parse HEAD)"
+  fi
+  # Without -d/--dereference, hash shown is tag object, not commit.
+  # With -d, prints 2 lines per tag, e.g., suppose 2 tags on one commit:
+  #   $ git show-ref --tags -d
+  #   af6ec9a9ae01592d36d06917e47b8ee9822178a7 refs/tags/v1.2.3
+  #   7ca83ee766d31181b34e6aafb340f537e2cc0d6f refs/tags/v1.2.3^{}
+  #   2aadd869b4ff4acc945b073a70be7e6573341ebc refs/tags/v1.2.3a3
+  #   7ca83ee766d31181b34e6aafb340f537e2cc0d6f refs/tags/v1.2.3a3^{}
+  # Where:
+  #   $ git cat-file -t af6ec9a9ae01592d36d06917e47b8ee9822178a7
+  #   tag
+  #   $ git cat-file -t 7ca83ee766d31181b34e6aafb340f537e2cc0d6f
+  #   commit
+  # So search on the known commit hash, which returns refs/tags/<tag>^{},
+  # then isolate just the tag -- and match only tags with a leading digit
+  # (assuming that indicates a version tag, to exclude non-version tags).
+  git show-ref --tags -d \
+    | grep "^${hash}.* refs/tags/v\?[0-9]" \
+    | command sed \
+      -e 's#.* refs/tags/v\?##' \
+      -e 's/\^{}//'
 }
 
 # ***
