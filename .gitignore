@@ -1,0 +1,10 @@
+# This file exists within 'release-ghub-pypi':
+#
+#   https://github.com/landonb/release-ghub-pypi
+
+# User's personal .ignore (e.g., .ignore.example).
+.ignore
+
+# Optional private DEV Makefile.
+Makefile.local
+
