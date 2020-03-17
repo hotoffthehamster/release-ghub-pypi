@@ -1172,10 +1172,38 @@ git_push_remote_branch () {
   local remote="$1"
   local branch="$2"
   local remote_commit
-  remote_commit="$(git ls-remote --heads ${remote} ${branch} | cut -f1)"
-  if [[ "${remote_commit}" != "${R2G2P_COMMIT}" ]]; then
+  # Check if HEAD has been pushed to remote or not.
+  #
+  # Here's a git lesson for you!
+  #
+  # - One way to check if HEAD has been pushed or not is to compare
+  #   the hashes of the local and remote branch HEADs. Either run:
+  #
+  #     remote_commit="$(git ls-remote --heads ${remote} ${branch} | cut -f1)"
+  #
+  #   or run more simply:
+  #
+  #     remote_commit="$(git rev-parse refs/remotes/${remote}/${branch})"
+  #
+  #   and then compare:
+  #
+  #     if [[ "${remote_commit}" != "${R2G2P_COMMIT}" ]]; then ... fi
+  #
+  # - Another, more to the point tool we can use is `merge-base`.
+  #
+  #   - Anecdotally, the ls-remote command is noticeably slow, e.g.,
+  #     $ TIMEFORMAT=%3U
+  #     $ time git merge-base --is-ancestor HEAD refs/remotes/origin/master
+  #     0.000
+  #     $ time git ls-remote --heads origin master
+  #     0.012
+  #
+  #     - Probably because ls-remote it talks to the remote..., duh.
+  #       MAYBE/2020-02-15: Which might actually be desirable...
+  #
+  if ! git merge-base --is-ancestor HEAD refs/remotes/${remote}/${branch}; then
     local gpr_args="${remote} ${branch}:${branch}"
-    echo "Git Push Remote Br.: \`${gpr_args}\`"
+    echo "Git Push Remote Br.: ‘${gpr_args}’"
     xtrace_beg
     git push ${gpr_args}
     xtrace_end
