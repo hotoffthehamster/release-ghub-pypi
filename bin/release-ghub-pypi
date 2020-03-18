@@ -247,7 +247,7 @@ must_prereqs_development () {
 # ***
 
 workon_virtualenv () {
-  if [[ ! -f "${VENV_WRAPPER}" ]]; then
+  if [ ! -f "${VENV_WRAPPER}" ]; then
     >&2 echo "ERROR: No virtualenv found at ‘${VENV_WRAPPER}’."
     return 1
   fi
@@ -256,8 +256,8 @@ workon_virtualenv () {
     echo "DEACTIVATE available!"
   fi
 
-  if [[ -n "${VIRTUAL_ENV}" ]]; then
-    if [[ "$(basename ${VIRTUAL_ENV})" == "${VENV_WORKON}" ]]; then
+  if [ -n "${VIRTUAL_ENV}" ]; then
+    if [ "$(basename ${VIRTUAL_ENV})" = "${VENV_WORKON}" ]; then
       # If DEV ran workon and then ran this script, `deactivate` will not be
       # declared, but the virtualenv environs will nonetheless be setup properly.
       echo "Already workingonit: ${VENV_WORKON}"
@@ -331,7 +331,7 @@ git_branch_name () {
 }
 
 suss_release_environment_from_branch () {
-  if [[ "${GHUB_ORG_BRANCH}" == "${GHUB_DEV_BRANCH}" ]]; then
+  if [ "${GHUB_ORG_BRANCH}" = "${GHUB_DEV_BRANCH}" ]; then
     >&2 echo
     >&2 echo "ERROR: \$GHUB_ORG_BRANCH == \$GHUB_DEV_BRANCH"
     >&2 echo
@@ -339,7 +339,7 @@ suss_release_environment_from_branch () {
   fi
 
   R2G2P_WAS_BRANCH=$(git_branch_name 2> /dev/null)
-  if [[ -z "${R2G2P_WAS_BRANCH}" ]]; then
+  if [ -z "${R2G2P_WAS_BRANCH}" ]; then
     >&2 echo
     >&2 echo "ERROR: Unexpected error fetching branch name!"
     >&2 echo
@@ -347,15 +347,15 @@ suss_release_environment_from_branch () {
     return 1
   fi
 
-  if [[ "${R2G2P_WAS_BRANCH}" == "${GHUB_ORG_BRANCH}" ]]; then
-    # I.e., [[ "${R2G2P_WAS_BRANCH}" == 'master' ]]
+  if [ "${R2G2P_WAS_BRANCH}" = "${GHUB_ORG_BRANCH}" ]; then
+    # I.e., [ "${R2G2P_WAS_BRANCH}" = 'master' ]
     setup_environ_vars_prod
   else
     setup_environ_vars_dev
 
-    if [[ "${R2G2P_WAS_BRANCH}" != "${GHUB_DEV_BRANCH}" ]]; then
-      # I.e., [[ "${R2G2P_WAS_BRANCH}" != "develop" ]]
-      if [[ "${R2G2P_WAS_BRANCH}" == "HEAD" ]]; then
+    if [ "${R2G2P_WAS_BRANCH}" != "${GHUB_DEV_BRANCH}" ]; then
+      # I.e., [ "${R2G2P_WAS_BRANCH}" != "develop" ]
+      if [ "${R2G2P_WAS_BRANCH}" = "HEAD" ]; then
         # Detached head. Need to remember hash, to restore later.
         R2G2P_WAS_BRANCH="$(git rev-parse HEAD)"
       fi
@@ -373,7 +373,7 @@ suss_release_environment_from_branch () {
 }
 
 restore_branch_from_before_all_this () {
-  if [[ -n "${R2G2P_WAS_BRANCH}" && "${R2G2P_BRANCH}" != "${R2G2P_WAS_BRANCH}" ]]; then
+  if [ -n "${R2G2P_WAS_BRANCH}" ] && [ "${R2G2P_BRANCH}" != "${R2G2P_WAS_BRANCH}" ]; then
     echo "Restored git branch: ${R2G2P_WAS_BRANCH}"
     git checkout ${R2G2P_WAS_BRANCH} &> /dev/null
     R2G2P_WAS_BRANCH=
@@ -383,14 +383,14 @@ restore_branch_from_before_all_this () {
 # ***
 
 must_environ_github_token () {
-  if [[ -z "${R2G2P_GHPASS}" ]]; then
+  if [ -z "${R2G2P_GHPASS}" ]; then
     >&2 echo "ERROR: Set the GitHub \`pass\` entries (GHUB_ORG_PASS and GHUB_DEV_PASS)."
     return 1
   fi
 
   GITHUB_TOKEN=$(pass ${R2G2P_GHPASS} | head -1)
 
-  if [[ -z "${GITHUB_TOKEN}" ]]; then
+  if [ -z "${GITHUB_TOKEN}" ]; then
     >&2 echo "ERROR: Could not read GitHub token from ‘pass ${R2G2P_GHPASS}’."
     return 1
   fi
@@ -400,7 +400,7 @@ must_environ_github_token () {
 }
 
 must_environ_pypi_password () {
-  if [[ -z "${R2G2P_PPPASS}" ]]; then
+  if [ -z "${R2G2P_PPPASS}" ]; then
     >&2 echo "ERROR: Set the GitHub \`pass\` entries (GHUB_ORG_PASS and GHUB_DEV_PASS)."
     return 1
   fi
@@ -408,7 +408,7 @@ must_environ_pypi_password () {
   PYPI_PASSWORD=$(pass ${R2G2P_PPPASS} | head -1)
   PYPI_USERNAME="${R2G2P_PPUSER}"
 
-  if [[ -z "${PYPI_PASSWORD}" ]]; then
+  if [ -z "${PYPI_PASSWORD}" ]; then
     >&2 echo "ERROR: Could not read PyPI password from ‘pass ${R2G2P_PPPASS}’."
     return 1
   fi
@@ -438,7 +438,7 @@ _print_section_break () {
 print_section_break () {
   local header="$1"
   _print_section_break
-  [[ -z "${header}" ]] && return
+  [ -z "${header}" ] && return
   local headch=$(echo -n "${header}" | wc -m)
   # MAGIC: /2 to only pad halfway; and -n subtract a little extra to be leftish.
   local padcnt=$((($(tput cols) - ${headch} - 5) / 2))
@@ -474,7 +474,7 @@ json_parse_version () {
   # Note that GitHub returns valid JSON if resource not found, e.g.,
   #   { "message": "Not Found", "documentation_url": ... }
   # in which case pipeline returns true, and jq echoes "null".
-  if [[ "${vers}" == 'null' ]]; then
+  if [ "${vers}" = 'null' ]; then
     return 1
   fi
   # Trim leading 'v', maybe.
@@ -494,7 +494,7 @@ curl_latest_version () {
   resp=$(eval curl ${curlopts} -s "${url}")
   code=$?
   xtrace_end
-  if [[ ${code} -eq 0 ]]; then
+  if [ ${code} -eq 0 ]; then
     json_parse_version "${resp}" "${jqry}"
   else
     return 1
@@ -502,12 +502,12 @@ curl_latest_version () {
 }
 
 pypi_host_from_deploy_env () {
-  [[ "${1:-$R2G2P_ENVIRON}" == 'test' ]] && echo 'test.' || echo ''
+  [ "${1:-$R2G2P_ENVIRON}" = 'test' ] && echo 'test.' || echo ''
 }
 
 pypi_hint_from_deploy_env () {
   local pypi_host="$(pypi_host_from_deploy_env $1)"
-  [[ -n "${pypi_host}" ]] && echo " (${pypi_host})" || echo ''
+  [ -n "${pypi_host}" ] && echo " (${pypi_host})" || echo ''
 }
 
 pypi_parse_release () {
@@ -517,10 +517,10 @@ pypi_parse_release () {
   local rels_q=".releases[\"${GITHEAD_LATEST_VERSION}\"] | length"
   local n_rels
   n_rels=$(echo "${resp}" | jq -r "${rels_q}")
-  [[ ${n_rels} -eq 0 ]] && return 1
+  [ ${n_rels} -eq 0 ] && return 1
 
   # FIXME/2020-01-25: (lb): Just curious. (Remove this experiment later!)
-  if [[ ${n_rels} -ne 2 ]]; then
+  if [ ${n_rels} -ne 2 ]; then
     # Predicting two entries, one for the .whl, and one for the .tar.gz.
     >&2 echo
     >&2 echo "INTEREST: PyPI indicates neither 0 nor 2 release items, but ‘${n_rels}’!"
@@ -554,7 +554,7 @@ pypi_latest_version () {
   resp=$(curl -s "${pypi_url}")
   code=$?
   xtrace_end
-  if [[ ${code} -eq 0 ]]; then
+  if [ ${code} -eq 0 ]; then
     local pub_vers
     local vers_q='.info.version'
     pub_vers=$(json_parse_version "${resp}" "${vers_q}")
@@ -646,7 +646,7 @@ githead_latest_version () {
   #     | grep "^7ca83ee7.* refs/tags/v\?[0-9] \
   #     | sed -e 's#.* refs/tags/v?##' -e 's/\^\{\}//'
   local commits_tags="$(git_versions_tagged_for_commit)"
-  if [[ -z "${commits_tags}" ]]; then
+  if [ -z "${commits_tags}" ]; then
     >&2 echo "ERROR: No [v]ersion tags on latest commit for branch ‘${R2G2P_BRANCH}’."
     >&2 echo
     # The setuptools-reported version includes the commit distance and hash, e.g.,
@@ -673,7 +673,7 @@ githead_latest_version () {
   fi
 
   local n_tags=$(echo "${commits_tags}" | wc -l)
-  if [[ "${n_tags}" -ne 1 ]]; then
+  if [ "${n_tags}" -ne 1 ]; then
     >&2 echo "ERROR: More than 1 tag (${n_tags}) on latest commit for ‘${R2G2P_BRANCH}’."
     >&2 echo
     # NOTE: I tried both
@@ -698,7 +698,7 @@ githead_latest_version () {
 # ***
 
 must_match_setuptools_and_commithead_versions () {
-  [[ "${SETUPPY_LATEST_VERSION}" == "${GITHEAD_LATEST_VERSION}" ]] && return
+  [ "${SETUPPY_LATEST_VERSION}" = "${GITHEAD_LATEST_VERSION}" ] && return
   >&2 echo
   # (lb): Both considered SCM because setup.py uses setuptools_scm,
   #   which in turns pulls from the local git (or whatever) repo.
@@ -722,7 +722,7 @@ python_get_distribution () {
 must_new_release_eq_get_distribution () {
   # NOTE: Because we ran `make develop`, the local distribution version matches, too.
   local user_distribution_version=$(python_get_distribution)
-  [[ "${user_distribution_version}" == "${RELEASE_VERSION}" ]] && return
+  [ "${user_distribution_version}" = "${RELEASE_VERSION}" ] && return
   >&2 echo
   >&2 echo "ERROR: Release and Installed Versions unexpectedly do not match!"
   >&2 echo
@@ -747,7 +747,7 @@ warn_new_release_eq_pypi_latest () {
   # by HEAD's tag, we gotta bail. Tell the user to generate a new tag
   # with a greater version.
   local pypi_version="$1"
-  [[ "${pypi_version}" != "${RELEASE_VERSION}" ]] && return
+  [ "${pypi_version}" != "${RELEASE_VERSION}" ] && return
   local pypi_env_hint="$(pypi_hint_from_deploy_env $2)"
   echo
   echo "🚨 ATTENTION 🚨: Said version already released to PyPI!"
@@ -762,10 +762,10 @@ warn_new_release_eq_pypi_latest () {
   local the_choice
   ${SKIP_PROMPTS} && the_choice='y' || read -e the_choice
   the_choice="${the_choice,,}"  # lower.
-  if [[ ${the_choice} != "y" && ${the_choice} != "d" ]]; then
+  if [ "${the_choice}" != "y" ] && [ "${the_choice}" != "d" ]; then
     death_and_die
   fi
-  [[ "${the_choice}" == "y" ]] && return 0
+  [ "${the_choice}" = "y" ] && return 0
   browser_open_pypi_package_delete_modal
   echo "You can take it from here! Good luck!!"
   exit 0
@@ -775,7 +775,7 @@ must_new_release_gt_pypi_latest () {
   local pypi_version="$1"
   local pypi_env_hint="$(pypi_hint_from_deploy_env $2)"
   # For sanity's sake, check PyPI version is less than the new release.
-  [[ -z "${pypi_version}" ]] && return
+  [ -z "${pypi_version}" ] && return
   pep440cmp ${pypi_version} le ${RELEASE_VERSION} > /dev/null && return
   >&2 echo
   >&2 echo "ERROR: It's an upside down world: PyPI versioned later than local!"
@@ -790,7 +790,7 @@ must_new_release_gt_pypi_latest () {
 
 must_new_release_eq_ghub_latest () {
   local ghub_latest_version="$1"
-  [[ "${ghub_latest_version}" == "${RELEASE_VERSION}" ]] && return
+  [ "${ghub_latest_version}" = "${RELEASE_VERSION}" ] && return
   >&2 echo
   >&2 echo "ERROR: It's an upside down world: GitHub versioned later than local!"
   >&2 echo
@@ -812,11 +812,11 @@ must_confirm_replace_ghub_latest () {
 #  # # USER_PROMPT
 #  # local the_choice
 #  # read the_choice
-#  # if [[ ${the_choice} == "y" || ${the_choice} == "Y" ]]; then
+#  # if [ "${the_choice}" = "y" ] || [ "${the_choice}" = "Y" ]; then
   local msg="Would you like to delete the old release from GitHub?"
   local the_choice
   the_choice=$(yesnoskip_prompt "${msg}")
-  if [[ "${the_choice}" == "y" ]]; then
+  if [ "${the_choice}" = "y" ]; then
     R2G2P_GHUB_CLOBBER_CERTIFIED=true
     return 0
   fi
@@ -840,7 +840,7 @@ must_new_release_ge_ghub_latest () {
   R2G2P_GHUB_CLOBBER_CERTIFIED=false
   R2G2P_GHUB_RELEASE_NO_UPLOAD=false
 
-  [[ -z "${ghub_latest_version}" ]] && return
+  [ -z "${ghub_latest_version}" ] && return
 
   pep440cmp ${ghub_latest_version} lt ${RELEASE_VERSION} > /dev/null && return
 
@@ -858,9 +858,9 @@ must_ghub_latest_ge_pypi_latest () {
   local pypi_latest_version="$1"
   local ghub_latest_version="$2"
   local pypi_env_hint="$(pypi_hint_from_deploy_env $3)"
-  [[ -z "${pypi_latest_version}" ]] && return
-  [[ -z "${ghub_latest_version}" ]] && return
-  [[ "${pypi_latest_version}" == "${ghub_latest_version}" ]] && return
+  [ -z "${pypi_latest_version}" ] && return
+  [ -z "${ghub_latest_version}" ] && return
+  [ "${pypi_latest_version}" = "${ghub_latest_version}" ] && return
   pep440cmp ${pypi_latest_version} lt ${ghub_latest_version} > /dev/null && return
   # (lb): Not the biggest error, but might be symptom of bigger problem, so die.
   >&2 echo
@@ -941,10 +941,10 @@ must_reconcile_latest_versions () {
 
   local pypi_latest_version
   local ghub_latest_version
-  if [[ "${R2G2P_ENVIRON}" == 'test' ]]; then
+  if [ "${R2G2P_ENVIRON}" = 'test' ]; then
     pypi_latest_version="${PYPI_TEST_VERSION}"
     ghub_latest_version="${GHUB_DEV_VERSION}"
-  elif [[ "${R2G2P_ENVIRON}" == 'prod' ]]; then
+  elif [ "${R2G2P_ENVIRON}" = 'prod' ]; then
     pypi_latest_version="${PYPI_PROD_VERSION}"
     ghub_latest_version="${GHUB_ORG_VERSION}"
   fi
@@ -980,7 +980,7 @@ parse_release_blurb_from_history_docs_md () {
         if [[ $line =~ $pattern ]]; then
             section=$((section + 1))
         fi
-        if [[ $section -eq 1 ]]; then
+        if [ $section -eq 1 ]; then
             printf '%s\n' "$line"
         fi
     done
@@ -1022,7 +1022,7 @@ prompt_verify_release_blurb () {
   echo -n "Does this release copy look okay? [Y/n] "
   # USER_PROMPT
   ${SKIP_PROMPTS} && YES_OR_NO='y' || read -e YES_OR_NO
-  if [[ ${YES_OR_NO^^} =~ ^Y.* || -z ${YES_OR_NO} ]]; then
+  if [[ ${YES_OR_NO^^} =~ ^Y.* ]] || [ -z "${YES_OR_NO}" ]; then
     return 0
   else
     return 1
@@ -1100,7 +1100,7 @@ yesnoskip_prompt () {
   # We could consider just the first character:
   #   the_choice=${the_choice:0:1}
   # or just demand a one-character response.
-  if [[ ${the_choice} != "y" && ${the_choice} != "s" ]]; then
+  if [ "${the_choice}" != "y" ] && [ "${the_choice}" != "s" ]; then
     death_and_die
   fi
   echo "${the_choice}"
@@ -1152,11 +1152,11 @@ github_purge_release_and_tags_of_same_name () {
 
   local tag_commit_hash
   R2G2P_DO_PUSH_TAG=false
-  if [[ -z "${remote_tag_hash}" ]]; then
+  if [ -z "${remote_tag_hash}" ]; then
     R2G2P_DO_PUSH_TAG=true
   else
     tag_commit_hash="$(git rev-list -n 1 ${remote_tag_hash})"
-    if [[ "${tag_commit_hash}" == "${R2G2P_COMMIT}" ]]; then
+    if [ "${tag_commit_hash}" = "${R2G2P_COMMIT}" ]; then
       # The remote tag has the same commit hash as the current release.
       # No need to send tag again, unless clobbering GitHub release,
       # in which case remove the tag, which removes the lightweight (non-annotated)
@@ -1174,7 +1174,7 @@ github_purge_release_and_tags_of_same_name () {
       echo -n "Would you like to delete the old remote tag? [y/N] "
       # USER_PROMPT
       ${SKIP_PROMPTS} && the_choice='n' || read -e the_choice
-      if [[ ${the_choice} == "y" || ${the_choice} == "Y" ]]; then
+      if [ "${the_choice}" = "y" ] || [ "${the_choice}" = "Y" ]; then
         R2G2P_DO_PUSH_TAG=true
       else
         >&2 echo
@@ -1185,7 +1185,7 @@ github_purge_release_and_tags_of_same_name () {
     fi
   fi
 
-  if ${R2G2P_DO_PUSH_TAG} && [[ -n "${tag_commit_hash}" ]]; then
+  if ${R2G2P_DO_PUSH_TAG} && [ -n "${tag_commit_hash}" ]; then
     # (lb): I realize there's a less obtuse syntax to delete tags, e.g.,
     #           git push --delete ${R2G2P_REMOTE} ${RELEASE_VERSION}
     #       But that syntax might also delete a branch of the same name.
@@ -1219,7 +1219,7 @@ git_push_remote_branch () {
   #
   #   and then compare:
   #
-  #     if [[ "${remote_commit}" != "${R2G2P_COMMIT}" ]]; then ... fi
+  #     if [ "${remote_commit}" != "${R2G2P_COMMIT}" ]; then ... fi
   #
   # - Another, more to the point tool we can use is `merge-base`.
   #
@@ -1243,7 +1243,7 @@ git_push_remote_branch () {
 }
 
 git_push_branch_if_prod_release () {
-  [[ "${R2G2P_ENVIRON}" != 'prod' ]] && return 0
+  [ "${R2G2P_ENVIRON}" != 'prod' ] && return 0
   git_push_remote_branch "${@}"
 }
 
@@ -1253,10 +1253,10 @@ git_push_remote_branch_and_tag () {
   #                         (We already checked on tag; see: R2G2P_DO_PUSH_TAG.)
   local msg
   msg="Push branch ‘${R2G2P_BRANCH}’ & tag ‘${RELEASE_VERSION}’ to ‘${R2G2P_REMOTE}’"
-  [[ "${R2G2P_ENVIRON}" == 'prod' ]] && msg="${msg} (et al.)"
+  [ "${R2G2P_ENVIRON}" = 'prod' ] && msg="${msg} (et al.)"
   local the_choice
   the_choice=$(yesnoskip_prompt "${msg}")
-  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+  [ "${the_choice}" = "s" ] && return  # 's' == Skip!
 
   git_push_remote_branch "${R2G2P_REMOTE}" "${R2G2P_BRANCH}"
   # Assume developer's repo has the tag but not necessarily the org branch.
@@ -1282,7 +1282,7 @@ github_release_release () {
   local msg="Upload GitHub release ‘${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}’"
   local the_choice
   the_choice=$(yesnoskip_prompt "${msg}")
-  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+  [ "${the_choice}" = "s" ] && return  # 's' == Skip!
 
   echo "GitHub-Release Rel.: ${R2G2P_GHUSER}/${R2G2P_GHREPO}/${RELEASE_VERSION}..."
   xtrace_beg
@@ -1302,7 +1302,7 @@ github_release_release () {
   # to be complete.
   local wheel_file
   wheel_file="dist/${PYPI_PROJECT}-${RELEASE_VERSION}-py3-none-any.whl"
-  if [[ -f "${wheel_file}" ]]; then
+  if [ -f "${wheel_file}" ]; then
     xtrace_beg
     #  -n, --name     Name of the file (*)
     #  -l, --label    Label (description) of the file
@@ -1327,12 +1327,12 @@ github_release_release () {
 #   https://packaging.python.org/guides/using-testpypi/
 
 pypitest_upload () {
-  [[ "${PYPI_TEST_VERSION}" == "${RELEASE_VERSION}" ]] && return
+  [ "${PYPI_TEST_VERSION}" = "${RELEASE_VERSION}" ] && return
   # (lb): See pypiprod_upload for thoughts-comment on pros-cons of prompting so much.
   local msg="Upload release ‘${RELEASE_VERSION}’ to ‘*testing* (test.pypi.org)’"
   local the_choice
   the_choice=$(yesnoskip_prompt "${msg}")
-  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+  [ "${the_choice}" = "s" ] && return  # 's' == Skip!
   # One could put the username and password in ~/.pypirc and then call, e.g.,
   #
   #   twine upload -r pypitest dist/*
@@ -1367,7 +1367,7 @@ pypitest_upload () {
 # ***
 
 pypiprod_upload () {
-  [[ "${PYPI_PROD_VERSION}" == "${RELEASE_VERSION}" ]] && return
+  [ "${PYPI_PROD_VERSION}" = "${RELEASE_VERSION}" ] && return
   # (lb): To prompt, or not to prompt: Prompts are annoying, but so are making
   # mistakes, and this script not run very often, and should be run interactively
   # -- especially because there are no unit tests, just integration tests whenever
@@ -1377,7 +1377,7 @@ pypiprod_upload () {
   local msg="Upload release ‘${RELEASE_VERSION}’ to ‘*PRODUCTION* (upload.pypi.org)’"
   local the_choice
   the_choice=$(yesnoskip_prompt "${msg}")
-  [[ "${the_choice}" == "s" ]] && return  # 's' == Skip!
+  [ "${the_choice}" = "s" ] && return  # 's' == Skip!
   # DEV: If you find yourself uploading manually or with errors,
   #      you can store the username and password in ~/.pypirc and then, e.g.:
   #
@@ -1399,7 +1399,7 @@ release_status_user_confirm () {
   local msg="Confirm release available and commence smoke testing"
   local the_choice
   the_choice=$(yesnoskip_prompt "${msg}" "Y")
-  [[ "${the_choice}" != "y" ]] && return 1 || return 0
+  [ "${the_choice}" != "y" ] && return 1 || return 0
 }
 
 # ***
@@ -1420,9 +1420,9 @@ smoke_test_pypi_environment () {
   #       define its own 'setup_project_vars' function (so we're not calling
   #       the one defined above, but a project-specific one).
   setup_project_vars
-  if [[ "${pypi_env}" == 'test' ]]; then
+  if [ "${pypi_env}" = 'test' ]; then
     setup_environ_vars_dev
-  elif [[ "${pypi_env}" == 'prod' ]]; then
+  elif [ "${pypi_env}" = 'prod' ]; then
     setup_environ_vars_prod
   fi
 
@@ -1439,7 +1439,7 @@ smoke_test_pypi_environment () {
 
   local venv_name="${R2G2P_GHREPO}-pypi-${RELEASE_VERSION}-${pypi_env}"
   local venv_tdir="$(mktemp -d --suffix=${venv_name})"
-  cd ${venv_tdir}
+  cd "${venv_tdir}"
 
   print_section_break "Searching pip for ‘${R2G2P_GHREPO}’:"
   pip search ${pip_search_index} ${R2G2P_GHREPO} |& head -n 3
@@ -1459,7 +1459,7 @@ smoke_test_pypi_environment () {
   echo "          ${venv_name}"
   echo "─────────────────────────────────────────────────────────────────────"
   echo
-  mkvirtualenv -a $(pwd) --python=${VENV_PYTHON3} ${venv_name}
+  mkvirtualenv -a "$(pwd)" --python=${VENV_PYTHON3} ${venv_name}
   # mkvirtualenv does an auto-workon.
   # Already in effect: workon ${venv_name}
 
@@ -1519,9 +1519,9 @@ smoke_test_pypi_environment () {
   deactivate
   rmvirtualenv ${venv_name}
 
-  if [[ -n "${expect_ver}" && "${install_ver}" != "${expect_ver}" ]]; then
+  if [ -n "${expect_ver}" ] && [ "${install_ver}" != "${expect_ver}" ]; then
     echo
-    >&2 echo "ERROR: [[ ${install_ver} != ${expect_ver} ]]"
+    >&2 echo "ERROR: [ \"${install_ver}\" != \"${expect_ver}\" ]"
     return 1
   fi
 
@@ -1590,9 +1590,9 @@ smoke_test_pypiprod_release () {
 #   - 2020-01-25 05:22: Nope, 5 was too short...
 #
 pypi_upload_release () {
-  if [[ "${R2G2P_ENVIRON}" == 'test' ]]; then
+  if [ "${R2G2P_ENVIRON}" = 'test' ]; then
     pypitest_upload
-  elif [[ "${R2G2P_ENVIRON}" == 'prod' ]]; then
+  elif [ "${R2G2P_ENVIRON}" = 'prod' ]; then
     pypiprod_upload
   fi
 }
@@ -1600,9 +1600,9 @@ pypi_upload_release () {
 pypi_smoke_test () {
   ! release_status_user_confirm && return 0
 
-  if [[ "${R2G2P_ENVIRON}" == 'test' ]]; then
+  if [ "${R2G2P_ENVIRON}" = 'test' ]; then
     smoke_test_pypitest_release
-  elif [[ "${R2G2P_ENVIRON}" == 'prod' ]]; then
+  elif [ "${R2G2P_ENVIRON}" = 'prod' ]; then
     smoke_test_pypiprod_release
   fi
 }
@@ -1709,7 +1709,7 @@ release_project () {
 errexit_cleanup () {
   local exit_code=$?
   restore_branch_from_before_all_this
-  if [[ ${exit_code} -ne 0 && ${exit_code} -ne 44 ]]; then
+  if [ ${exit_code} -ne 0 ] && [ ${exit_code} -ne 44 ]; then
     echo "ERROR: release failed! (${exit_code})"
   fi
   exit ${exit_code}
