@@ -897,18 +897,18 @@ query_latest_versions () {
   # ***
 
   local pypi_test_vers=${PYPI_TEST_VERSION:-n/a}
-  info "$(attr_italic)test$(reset_italic).PyPI Pkg. Vers: ${pypi_test_vers}"
+  info "$(attr_italic)test$(res_italic).PyPI Pkg. Vers: ${pypi_test_vers}"
 
   local pypi_prod_vers=${PYPI_PROD_VERSION:-n/a}
-  info "PyPI $(attr_italic)Prod$(reset_italic) Pkg. Vers: ${pypi_prod_vers}"
+  info "PyPI $(attr_italic)Prod$(res_italic) Pkg. Vers: ${pypi_prod_vers}"
 
   # ***
 
   local ghub_dev_vers=${GHUB_DEV_VERSION:-n/a}
-  info "GHub $(attr_underline)DEV$(reset_underline)eloper Rel.: ${ghub_dev_vers}"
+  info "GHub $(attr_underline)DEV$(res_underline)eloper Rel.: ${ghub_dev_vers}"
 
   local ghub_org_vers=${GHUB_ORG_VERSION:-n/a}
-  info "GHub $(attr_underline)ORG$(reset_underline)aniz’n Rel.: ${ghub_org_vers}"
+  info "GHub $(attr_underline)ORG$(res_underline)aniz’n Rel.: ${ghub_org_vers}"
 
   # ***
 
