@@ -735,7 +735,7 @@ must_new_release_eq_get_distribution () {
 # ***
 
 death_and_die () {
-  >&2 echo
+  ${SKIP_PROMPT_NL:-false} || >&2 echo
   >&2 echo "ERROR: Death!"
   trap - EXIT
   exit 44
@@ -1090,7 +1090,7 @@ yesnoskip_prompt () {
     lng_opts='yes/no/Skip'
     sht_opts='y/n/S'
   fi
-  >&2 echo
+  ${SKIP_PROMPT_NL:-false} || >&2 echo
   >&2 echo -n "Please ${lng_opts}: ${the_ask}? [${sht_opts}] "
   # USER_PROMPT
   local the_choice
