@@ -166,12 +166,12 @@ suss_piping () {
 # ###
 
 xtrace_beg () {
-  ${BASH_XTRACE} && set -x
+  ${BASH_XTRACE:-false} && set -x
   return 0
 }
 
 xtrace_end () {
-  ${BASH_XTRACE} && set +x
+  ${BASH_XTRACE:-false} && set +x
   return 0
 }
 
@@ -451,7 +451,7 @@ print_section_break () {
 install_locally () {
   ${SKIP_BUILD} && return
   # Ensure the installed version reflects what local path says.
-  if ${BASH_XTRACE}; then
+  if ${BASH_XTRACE:-false}; then
     print_section_break "make develop"
     make develop
     print_section_break
@@ -760,7 +760,7 @@ warn_new_release_eq_pypi_latest () {
   echo -n "Would you still like to proceed? [y/N/d] "
   # USER_PROMPT
   local the_choice
-  ${SKIP_PROMPTS} && the_choice='y' || read -e the_choice
+  ${SKIP_PROMPTS:-false} && the_choice='y' || read -e the_choice
   the_choice="${the_choice,,}"  # lower.
   if [ "${the_choice}" != "y" ] && [ "${the_choice}" != "d" ]; then
     death_and_die
@@ -824,7 +824,7 @@ must_confirm_replace_ghub_latest () {
 }
 
 must_github_release_delete_old () {
-  ! ${R2G2P_GHUB_CLOBBER_CERTIFIED} && return
+  ! ${R2G2P_GHUB_CLOBBER_CERTIFIED:-false} && return
   local grd_args="-u ${R2G2P_GHUSER} -r ${R2G2P_GHREPO} --tag ${RELEASE_VERSION}"
   echo "Deleting GitHub Rel: ‘${grd_args}’"
   xtrace_beg
@@ -1021,7 +1021,7 @@ prompt_verify_release_blurb () {
   print_section_break
   echo -n "Does this release copy look okay? [Y/n] "
   # USER_PROMPT
-  ${SKIP_PROMPTS} && YES_OR_NO='y' || read -e YES_OR_NO
+  ${SKIP_PROMPTS:-false} && YES_OR_NO='y' || read -e YES_OR_NO
   if [[ ${YES_OR_NO^^} =~ ^Y.* ]] || [ -z "${YES_OR_NO}" ]; then
     return 0
   else
@@ -1050,7 +1050,7 @@ project_double_check_make_docs_lint_and_tests () {
 double_check_make_docs_lint_and_tests () {
   ${SKIP_TESTS} && return
   # Ensure the installed version reflects what local path says.
-  if ${BASH_XTRACE}; then
+  if ${BASH_XTRACE:-false}; then
     project_double_check_make_docs_lint_and_tests
   else
     echo
@@ -1065,7 +1065,7 @@ double_check_make_docs_lint_and_tests () {
 
 build_dist () {
   ${SKIP_BUILD} && return
-  if ${BASH_XTRACE}; then
+  if ${BASH_XTRACE:-false}; then
     print_section_break "make dist"
     make dist
     print_section_break
@@ -1094,7 +1094,7 @@ yesnoskip_prompt () {
   >&2 echo -n "Please ${lng_opts}: ${the_ask}? [${sht_opts}] "
   # USER_PROMPT
   local the_choice
-  ${SKIP_PROMPTS} && the_choice='s' || read -e the_choice
+  ${SKIP_PROMPTS:-false} && the_choice='s' || read -e the_choice
   [ -z "${the_choice}" ] && the_choice="${default_choice}"
   the_choice="${the_choice,,}"  # lower.
   # We could consider just the first character:
@@ -1163,7 +1163,7 @@ github_purge_release_and_tags_of_same_name () {
       # release from https://github.com/user/repo/releases that's automatically
       # generated according to tags ((lb): or whatever; I'm not quite sure how
       # it works, just that deleting the tag clears the entry).
-      ${R2G2P_GHUB_CLOBBER_CERTIFIED} && R2G2P_DO_PUSH_TAG=true
+      ${R2G2P_GHUB_CLOBBER_CERTIFIED:-false} && R2G2P_DO_PUSH_TAG=true
     else
       echo
       echo "🚨 ATTENTION 🚨: The tag on ‘${R2G2P_REMOTE}’ refers to a different commit."
@@ -1173,7 +1173,7 @@ github_purge_release_and_tags_of_same_name () {
       echo
       echo -n "Would you like to delete the old remote tag? [y/N] "
       # USER_PROMPT
-      ${SKIP_PROMPTS} && the_choice='n' || read -e the_choice
+      ${SKIP_PROMPTS:-false} && the_choice='n' || read -e the_choice
       if [ "${the_choice}" = "y" ] || [ "${the_choice}" = "Y" ]; then
         R2G2P_DO_PUSH_TAG=true
       else
@@ -1610,7 +1610,7 @@ pypi_smoke_test () {
 # ###
 
 browser_load_url () {
-  ${SKIP_PROMPTS} && return
+  ${SKIP_PROMPTS:-false} && return
   # Avoid terminal noise, and always redirect output.
   # Avoid hanging this script, and always background the
   # process (alternatively, check, say, `pidof ${BROWSER}`
