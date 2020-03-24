@@ -275,15 +275,36 @@ workon_virtualenv () {
 
 # ###
 
-must_pristine_working () {
-  if test -n "$(git status --porcelain)"; then
-    >&2 echo
-    >&2 echo "ERROR: Project working directory not tidy! Try:"
-    >&2 echo
-    >&2 echo "   cd ${PROJECT_PATH} && git status"
-    >&2 echo
-    return 1
+# Check that the current directory exists in a Git repo.
+must_cwd_a_git_project () {
+  # A naive approach is to check for the .git/ directory.
+  # Another approach is to check --show-toplevel, e.g.,
+  #   git rev-parse --show-toplevel &> /dev/null
+  # Except both those approaches are truthy before `git init`.
+  # A better naive approach might check if there are any refs:
+  #   command ls -A ".git/refs/heads"
+  # And the better porcelain command checks for HEAD.
+  git rev-parse --abbrev-ref HEAD &> /dev/null && return 0
+  local projpath="${PROJECT_PATH:-$(pwd)}"
+  local errmsg
+  if git rev-parse --show-toplevel &> /dev/null; then
+    errmsg="Specified Git project has no commits"
+  else
+    errmsg="Specified directory not a Git project"
   fi
+  >&2 echo "ERROR: ${errmsg}: ${projpath}"
+  return 1
+}
+
+must_pristine_working () {
+  ! test -n "$(git status --porcelain)" && return 0
+  local projpath="${PROJECT_PATH:-$(pwd)}"
+  >&2 echo
+  >&2 echo "ERROR: Project working directory not tidy! Try:"
+  >&2 echo
+  >&2 echo "   cd ${projpath} && git status"
+  >&2 echo
+  return 1
 }
 
 # ***
@@ -1651,6 +1672,9 @@ release_project () {
   workon_virtualenv
 
   # ***
+
+  # Demand in a git repo.
+  must_cwd_a_git_project
 
   # Demand that git is tidy in the working directory.
   must_pristine_working
