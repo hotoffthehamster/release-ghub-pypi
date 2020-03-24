@@ -187,7 +187,7 @@ must_prereqs_system () {
     pass \
     python \
   ; do
-    if ! command -v ${cmdname} > /dev/null; then
+    if ! command -v "${cmdname}" > /dev/null; then
       # 2020-02-13: I build latest Vim and updated plugins and now
       #  my shell parser is broken on << }\ >> syntax (touching one
       #  another) -- the remainder of file looks quoted...
