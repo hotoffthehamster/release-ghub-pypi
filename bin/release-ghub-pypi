@@ -1089,6 +1089,9 @@ yesnoskip_prompt () {
   elif [ "${default_choice}" = "S" ]; then
     lng_opts='yes/no/Skip'
     sht_opts='y/n/S'
+  else
+    >&2 echo "ASSERT: Unrecognized default_choice: ${default_choice}"
+    death_and_die
   fi
   ${SKIP_PROMPT_NL:-false} || >&2 echo
   >&2 echo -n "Please ${lng_opts}: ${the_ask}? [${sht_opts}] "
