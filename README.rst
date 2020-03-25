@@ -128,17 +128,14 @@ Or keep reading for a few examples and setup instructions.
 Usage examples
 ==============
 
-.. |demo-old-history| image:: https://asciinema.org/a/313251.png
-                      :height: 501px
-                      :width:  737px
-                      :alt: release-ghub-pypi history warning demo
-.. _demo-old-history: https://asciinema.org/a/313251
-..                      :scale: 75 %
-
 Here's a look at how the release tool warns you if you forgot
 to update the release notes with the latest release version:
 
-|demo-old-history|_
+.. raw:: html
+
+    <a href="https://asciinema.org/a/313251?size=medium">
+      <img src="https://asciinema.org/a/313251.png" width="737"/>
+    </a>
 
 #############
 Prerequisites
