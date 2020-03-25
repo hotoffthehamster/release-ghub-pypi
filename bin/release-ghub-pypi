@@ -90,8 +90,6 @@ source_deps () {
 
   # https://github.com/landonb/sh-colors
   _source_it "${prefix}" "../deps/sh-colors/bin" "colors.sh"
-  # https://github.com/landonb/sh-logger
-  _source_it "${prefix}" "../deps/sh-logger/bin" "logger.sh"
 
   ! ${depsnok}
 }
@@ -919,24 +917,24 @@ query_latest_versions () {
   # ***
 
   local pypi_test_vers=${PYPI_TEST_VERSION:-n/a}
-  info "$(attr_italic)test$(res_italic).PyPI Pkg. Vers: ${pypi_test_vers}"
+  echo "$(attr_italic)test$(res_italic).PyPI Pkg. Vers: ${pypi_test_vers}"
 
   local pypi_prod_vers=${PYPI_PROD_VERSION:-n/a}
-  info "PyPI $(attr_italic)Prod$(res_italic) Pkg. Vers: ${pypi_prod_vers}"
+  echo "PyPI $(attr_italic)Prod$(res_italic) Pkg. Vers: ${pypi_prod_vers}"
 
   # ***
 
   local ghub_dev_vers=${GHUB_DEV_VERSION:-n/a}
-  info "GHub $(attr_underline)DEV$(res_underline)eloper Rel.: ${ghub_dev_vers}"
+  echo "GHub $(attr_underline)DEV$(res_underline)eloper Rel.: ${ghub_dev_vers}"
 
   local ghub_org_vers=${GHUB_ORG_VERSION:-n/a}
-  info "GHub $(attr_underline)ORG$(res_underline)aniz’n Rel.: ${ghub_org_vers}"
+  echo "GHub $(attr_underline)ORG$(res_underline)aniz’n Rel.: ${ghub_org_vers}"
 
   # ***
 
-  info "setuptools' Version: ${SETUPPY_LATEST_VERSION}"
+  echo "setuptools' Version: ${SETUPPY_LATEST_VERSION}"
 
-  info "Branch Head Version: ${GITHEAD_LATEST_VERSION}"
+  echo "Branch Head Version: ${GITHEAD_LATEST_VERSION}"
 }
 
 # ***
@@ -1019,6 +1017,10 @@ prompt_verify_release_blurb () {
   # Prompt about the HISTORY snippet, but not if not uploading to GitHub.
   ${R2G2P_GHUB_RELEASE_NO_UPLOAD} && return
   print_section_break
+
+  warn () {
+    >&2 echo "$(attr_bold)$(fg_white)$(bg_maroon)${@}$(attr_reset)"
+  }
 
   # MEH/2020-01-19: (lb): How difficult/strict you wanna make this?
   # E.g., would it be to much to expect the first line to look like
