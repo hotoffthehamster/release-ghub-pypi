@@ -446,8 +446,11 @@ _print_section_break () {
   local fishes="🐬 🐟 🐋 🐠 🦈 🐡 🐳 🦖 🦖 🦖 🦖 🦖 🦖"
   # NOTE: Use `wc -m`, not `wc -c`, to count characters, not bytes.
   local fishch=$(echo -n "${fishes}" | wc -m)
-  # MAGIC: /2 to only pad halfway; and -n subtract a little extra to be leftish.
-  local padcnt=$((($(tput cols) - ${fishch} - 19) / 2))
+  # (lb): First approach to position the horizontal ruler:
+  #  # MAGIC: /2 to only pad halfway; and -n subtract a little extra to be leftish.
+  #  local padcnt=$((($(tput cols) - ${fishch} - 19) / 2))
+  # but for demos I've got smaller windows and I think rule of sixth looks nicer.
+  local padcnt=$((($(tput cols) - ${fishch}) / 6))
   # echo "padcnt: $padcnt / fishch: $fishch"
   echo
   echo "$(print_padding ${padcnt} ' ')${fishes}"
