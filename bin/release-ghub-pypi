@@ -416,8 +416,7 @@ must_environ_github_token () {
     return 1
   fi
 
-  local trunctok=$(echo ${GITHUB_TOKEN} | sed 's/^\(.\{8\}\).*/\1.../')
-  echo "Loaded GITHUB_TOKEN: ${trunctok}"
+  echo "Loaded GITHUB_TOKEN: XXXXXXXX..."
 }
 
 must_environ_pypi_password () {
@@ -434,8 +433,7 @@ must_environ_pypi_password () {
     return 1
   fi
 
-  local truncpwd=$(echo ${PYPI_PASSWORD} | sed 's/./X/g')
-  echo "Found PYPI_PASSWORD: ${truncpwd}"
+  echo "Found PYPI_PASSWORD: XXXXXXXX..."
 }
 
 # ***
