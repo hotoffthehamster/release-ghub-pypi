@@ -1414,22 +1414,26 @@ github_release_release () {
   # to be complete.
   local wheel_file
   wheel_file="dist/${PYPI_PROJECT}-${RELEASE_VERSION}-py3-none-any.whl"
-  if [ -f "${wheel_file}" ]; then
-    xtrace_beg
-    #  -n, --name     Name of the file (*)
-    #  -l, --label    Label (description) of the file
-    #  -f, --file     File to upload (use - for stdin) (*)
-    #  -R, --replace  Replace asset with same name if it already exists (WARNING:
-    #                 not atomic, failure to upload will remove the original asset too)
-    GITHUB_TOKEN="${GITHUB_TOKEN}" \
-      github-release upload \
-        --user ${R2G2P_GHUSER} \
-        --repo ${R2G2P_GHREPO} \
-        --tag ${RELEASE_VERSION} \
-        --name "$(basename ${wheel_file})" \
-        --file "${wheel_file}"
-    xtrace_end
-  fi
+  github_upload_file "${wheel_file}"
+}
+
+github_upload_file () {
+  local wheel_file="$1"
+  [ -f "${wheel_file}" ] || return 1
+  xtrace_beg
+  #  -n, --name     Name of the file (*)
+  #  -l, --label    Label (description) of the file
+  #  -f, --file     File to upload (use - for stdin) (*)
+  #  -R, --replace  Replace asset with same name if it already exists (WARNING:
+  #                 not atomic, failure to upload will remove the original asset too)
+  GITHUB_TOKEN="${GITHUB_TOKEN}" \
+    github-release upload \
+      --user ${R2G2P_GHUSER} \
+      --repo ${R2G2P_GHREPO} \
+      --tag ${RELEASE_VERSION} \
+      --name "$(basename ${wheel_file})" \
+      --file "${wheel_file}"
+  xtrace_end
 }
 
 # ***
