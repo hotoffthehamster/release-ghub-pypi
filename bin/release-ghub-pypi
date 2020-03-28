@@ -229,9 +229,13 @@ must_prereqs_virtualenv () {
 
 must_prereqs_development () {
   local okay=true
+  # MAYBE/2020-03-28: Check also `setuptools`, `setuptools_scm`?
+  # - What about setting up a virtualenv, too?
   for cmdname in \
-    twine \
     pep440cmp \
+    pip \
+    twine \
+    wheel \
   ; do
     if ! command -v ${cmdname} > /dev/null; then
       >&2 echo "ERROR: Missing virtualenv command ‘${cmdname}’."
