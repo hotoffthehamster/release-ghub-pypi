@@ -489,9 +489,7 @@ print_section_break () {
 
 # ---
 
-install_locally () {
-  ${SKIP_BUILD} && return
-  # Ensure the installed version reflects what local path says.
+install_locally_make () {
   if ${BASH_XTRACE:-false}; then
     print_section_break "make develop"
     make develop
@@ -499,6 +497,31 @@ install_locally () {
   else
     echo "Ensuring up to date: \`make develop\`..."
     make develop > /dev/null
+  fi
+}
+
+install_locally_setup_py () {
+  pip install -U -e .
+}
+
+install_locally_setup_py_trace () {
+  if ${BASH_XTRACE:-false}; then
+    print_section_break "pip install -U -e ."
+    install_locally_setup_py
+    print_section_break
+  else
+    echo "Ensuring up to date: \`pip install -U -e .\`"
+    install_locally_setup_py > /dev/null
+  fi
+}
+
+install_locally () {
+  ${SKIP_BUILD} && return
+  # Ensure the installed version reflects what local path says.
+  if [ -f "Makefile" ]; then
+    install_locally_make
+  else
+    install_locally_setup_py_trace
   fi
 
   # Just an overly-helpful (-paranoid) check for required Python packages,
@@ -1108,8 +1131,7 @@ double_check_make_docs_lint_and_tests () {
 
 # ***
 
-build_dist () {
-  ${SKIP_BUILD} && return
+build_dist_make () {
   if ${BASH_XTRACE:-false}; then
     print_section_break "make dist"
     make dist
@@ -1117,6 +1139,33 @@ build_dist () {
   else
     echo "Build distributable: \`make dist\`..."
     make dist > /dev/null
+  fi
+}
+
+build_dist_setup_py () {
+  /bin/rm -rf build/ dist/
+  python setup.py sdist
+  python setup.py bdist_wheel
+  ls -l dist/
+}
+
+build_dist_setup_py_trace () {
+  if ${BASH_XTRACE:-false}; then
+    print_section_break "python setup.py"
+    build_dist_setup_py
+    print_section_break
+  else
+    echo "Build distributable: \`python setup.py\`..."
+    build_dist_setup_py > /dev/null
+  fi
+}
+
+build_dist () {
+  ${SKIP_BUILD} && return
+  if [ -f "Makefile" ]; then
+    build_dist_make
+  else
+    build_dist_setup_py_trace
   fi
 }
 
