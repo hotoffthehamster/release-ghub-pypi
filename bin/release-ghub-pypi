@@ -358,6 +358,12 @@ git_branch_name () {
   git rev-parse --abbrev-ref HEAD
 }
 
+git_remote_branch_exists () {
+  local remote="$1"
+  local branch="$2"
+  git show-branch remotes/${remote}/${branch} &> /dev/null
+}
+
 suss_release_environment_from_branch () {
   if [ "${GHUB_ORG_BRANCH}" = "${GHUB_DEV_BRANCH}" ]; then
     >&2 echo
@@ -1277,7 +1283,18 @@ git_push_remote_branch () {
   #     - Probably because ls-remote it talks to the remote..., duh.
   #       MAYBE/2020-02-15: Which might actually be desirable...
   #
-  if ! git merge-base --is-ancestor HEAD refs/remotes/${remote}/${branch}; then
+  if git_remote_branch_exists "${remote}" "${branch}" &&
+    git merge-base --is-ancestor HEAD refs/remotes/${remote}/${branch} \
+  ; then
+    # 2020-03-28: Oddly, if you make and tag a new branch but only push the tag,
+    #             git_remote_branch_exists will be truthy, and git remote will
+    #             show the remote branch, but GitHub will not show it (but you
+    #             can see the history via the tag).
+    #             Nor can you delete it:
+    #               error: unable to delete '<>': remote ref does not exist
+    #             So delete and recreate the remote. Weird.
+    echo "Git Push Remote Br.: Skipping: HEAD is not ancestor ${remote}/${branch}"
+  else
     local gpr_args="${remote} ${branch}:${branch}"
     echo "Git Push Remote Br.: ‘${gpr_args}’"
     xtrace_beg
@@ -1308,7 +1325,9 @@ git_push_remote_branch_and_tag () {
   git_push_branch_if_prod_release "${GHUB_DEV_REMOTE}" "${GHUB_ORG_BRANCH}"
   git_push_branch_if_prod_release "${GHUB_ORG_REMOTE}" "${GHUB_DEV_BRANCH}"
 
-  if ${R2G2P_DO_PUSH_TAG}; then
+  if ! ${R2G2P_DO_PUSH_TAG}; then
+    echo "Git Push Remote Tag: Skipping."
+  else
     # Do not push all tags, which could include your private branch tags!
     #   # NOPE: git push upstream --tags
     local gpr_args="${R2G2P_REMOTE} refs/tags/${RELEASE_VERSION}"
