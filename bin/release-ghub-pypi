@@ -1412,9 +1412,18 @@ github_release_release () {
   # (lb): There's really no reason to upload the wheel file.
   # And no reason not to. I think I'm inclined to do so just
   # to be complete.
-  local wheel_file
-  wheel_file="dist/${PYPI_PROJECT}-${RELEASE_VERSION}-py3-none-any.whl"
-  github_upload_file "${wheel_file}"
+  let 'num_uploaded = 0' || true  # A '0' from let equates to false, who knew!
+  for pyvers in "py3" "py2.py3"; do
+    local wheel_file
+    wheel_file="dist/${PYPI_PACKAGE}-${RELEASE_VERSION}-${pyvers}-none-any.whl"
+    github_upload_file "${wheel_file}" && let 'num_uploaded += 1' || true
+  done
+  if [ ${num_uploaded} -ne 1 ]; then
+    # 2020-03-28: (lb): Not sure this is fatal or not. At least message.
+    >&2 echo
+    >&2 echo "ERROR: Did not upload one wheel file... check under dist/."
+    >&2 echo
+  fi
 }
 
 github_upload_file () {
