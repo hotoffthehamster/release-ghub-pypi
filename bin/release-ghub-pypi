@@ -396,7 +396,8 @@ suss_release_environment_from_branch () {
       if ! git_branch_exists ${R2G2P_BRANCH}; then
         >&2 echo "ERROR: No such branch GHUB_DEV_BRANCH=${GHUB_DEV_BRANCH}"
         >&2 echo " HINT: If you want to use the current branch,"
-        >&2 echo "       use GHUB_DEV_BRANCH or GHUB_ORG_BRANCH."
+        >&2 echo "       set GHUB_DEV_BRANCH for test release; and"
+        >&2 echo "       set GHUB_ORG_BRANCH also for prod release."
         return 1
       fi
       # git-checkout prints, e.g.,
@@ -722,6 +723,7 @@ githead_latest_version () {
     )"
     >&2 echo "  Depending on which part of the version you want to bump"
     >&2 echo "  (major, minor, patch, or pre-release), you could, e.g.,"
+    >&2 echo "  based on the current version (${SETUPPY_LATEST_VERSION}):"
     >&2 echo
     >&2 echo "    git tag -a ${patch_bump} -m \"Version: ${patch_bump}\" ${R2G2P_BRANCH}"
     >&2 echo
@@ -1611,7 +1613,7 @@ smoke_test_pypi_environment () {
 
   set -e
 
-  echo "Testing: pip install $(echo ${pip_install_indices}) \\"
+  echo "Testing: pip install ${install_pre} $(echo ${pip_install_indices}) \\"
   echo "          ${PYPI_PROJECT}"
   echo "─────────────────────────────────────────────────────────────────────"
   echo
