@@ -575,13 +575,38 @@ pypi_hint_from_deploy_env () {
   [ -n "${pypi_host}" ] && echo " (${pypi_host})" || echo ''
 }
 
+parse_pypi_response_project_exists () {
+  local resp="$1"
+  # 2020-03-28: Seeing "301 Moved Permanently" on project absent, and,
+  #    "The resource has been moved to /pypi/<project>/json/; you should
+  #     be redirected automatically."
+  # except that that path returns 404 for an absent project -- but for an
+  # existing project, when the URL includes the trailing slash, ".../json/"
+  # redirects back to the /json path. - So we search for 301 error.
+  if echo "${resp}" | grep "301 Moved Permanently" > /dev/null; then
+    return 1
+  fi
+  return 0
+}
+
 pypi_parse_release () {
   local resp="$1"
+  local pypi_url="$2"
   # If the current release version is pre-release, it will not be indicated
   # as the current release, but it will appear in the releases list.
   local rels_q=".releases[\"${GITHEAD_LATEST_VERSION}\"] | length"
   local n_rels
   n_rels=$(echo "${resp}" | jq -r "${rels_q}")
+  if [ -z "${n_rels}" ]; then
+    >&2 echo
+    >&2 echo "ERROR: Unable to parse PyPI response."
+    >&2 echo
+    >&2 echo "curl -s \"${pypi_url}\""
+    >&2 echo
+    >&2 echo "${resp}"
+    >&2 echo
+    exit 1
+  fi
   [ ${n_rels} -eq 0 ] && return 1
 
   # FIXME/2020-01-25: (lb): Just curious. (Remove this experiment later!)
@@ -620,10 +645,14 @@ pypi_latest_version () {
   code=$?
   xtrace_end
   if [ ${code} -eq 0 ]; then
+    if ! parse_pypi_response_project_exists "${resp}"; then
+      # The caller will assign something friendly, i.e., 'n/a'.
+      return 0
+    fi
     local pub_vers
     local vers_q='.info.version'
     pub_vers=$(json_parse_version "${resp}" "${vers_q}")
-    if ! pypi_parse_release "${resp}"; then
+    if ! pypi_parse_release "${resp}" "${pypi_url}"; then
       echo "${pub_vers}"
       return 0
     fi
@@ -640,6 +669,9 @@ pypi_latest_version () {
     >&2 echo
     return 1
   else
+    >&2 echo
+    >&2 echo "ERROR: Command failed: curl -s \"${pypi_url}\""
+    >&2 echo
     return 1
   fi
 }
