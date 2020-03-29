@@ -345,6 +345,11 @@ setup_environ_vars_prod () {
   R2G2P_PPPASS="${PYPI_PROD_PASS}"
 }
 
+git_branch_exists () {
+  local branch_name="${1:-${GITFLU_MYST_AT_BRANCH}}"
+  git show-ref --verify --quiet refs/heads/${branch_name}
+}
+
 git_branch_name () {
   git rev-parse --abbrev-ref HEAD
 }
@@ -377,6 +382,12 @@ suss_release_environment_from_branch () {
       if [ "${R2G2P_WAS_BRANCH}" = "HEAD" ]; then
         # Detached head. Need to remember hash, to restore later.
         R2G2P_WAS_BRANCH="$(git rev-parse HEAD)"
+      fi
+      if ! git_branch_exists ${R2G2P_BRANCH}; then
+        >&2 echo "ERROR: No such branch GHUB_DEV_BRANCH=${GHUB_DEV_BRANCH}"
+        >&2 echo " HINT: If you want to use the current branch,"
+        >&2 echo "       use GHUB_DEV_BRANCH or GHUB_ORG_BRANCH."
+        return 1
       fi
       # git-checkout prints, e.g.,
       #   Switched to branch 'develop'
