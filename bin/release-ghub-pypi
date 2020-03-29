@@ -273,6 +273,7 @@ workon_virtualenv () {
   set +e
   workon ${VENV_WORKON}
   set -e
+  cd "${PROJECT_PATH}"
 }
 
 # ###
