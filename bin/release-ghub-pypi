@@ -365,12 +365,12 @@ git_remote_branch_exists () {
 }
 
 suss_release_environment_from_branch () {
-  if [ "${GHUB_ORG_BRANCH}" = "${GHUB_DEV_BRANCH}" ]; then
-    >&2 echo
-    >&2 echo "ERROR: \$GHUB_ORG_BRANCH == \$GHUB_DEV_BRANCH"
-    >&2 echo
-    return 1
-  fi
+  # This used to check that the branches are not the same, e.g.,
+  #   [ "${GHUB_ORG_BRANCH}" = "${GHUB_DEV_BRANCH}" ] && error && return 1
+  # but that's okay. E.g., if you have just one branch and no others, then
+  # set GHUB_DEV_BRANCH to that branch and GHUB_ORG_BRANCH to anything else
+  # to release to test; or set both GHUB_DEV_BRANCH and GHUB_ORG_BRANCH to
+  # that branch name to release to prod.
 
   R2G2P_WAS_BRANCH=$(git_branch_name 2> /dev/null)
   if [ -z "${R2G2P_WAS_BRANCH}" ]; then
@@ -1356,6 +1356,8 @@ git_push_remote_branch () {
 
 git_push_branch_if_prod_release () {
   [ "${R2G2P_ENVIRON}" != 'prod' ] && return 0
+  # For projects that only use one branch (we already push this remote/branch).
+  [ "${R2G2P_REMOTE}" = "$1" ] && [ "${R2G2P_BRANCH}" = "$2" ] && return 0
   git_push_remote_branch "${@}"
 }
 
