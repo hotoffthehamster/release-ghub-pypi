@@ -188,10 +188,10 @@ on a Debian/Ubuntu/Linux Mint distribution.
    $ mkvirtualenv -a $(pwd) --python=/usr/bin/python3.8 release
 
    # Install a PEP440 version compare tool.
-   (release) $ pip install pep440-version-compare-cli
+   (release) $ pip3 install pep440-version-compare-cli
 
    # Install the PyPI publishing tool.
-   (release) $ pip install twine
+   (release) $ pip3 install twine
 
 Create passwords
 ================
