@@ -145,7 +145,7 @@ Install dependencies
 ====================
 
 .. |github-release| replace:: ``github-release``
-.. _github-release: https://github.com/aktau/github-release
+.. _github-release: https://github.com/meterup/github-release
 
 This script has a handful of dependencies that should be easy to setup.
 
@@ -180,9 +180,7 @@ on a Debian/Ubuntu/Linux Mint distribution.
    $ pip3 install --user --upgrade virtualenv virtualenvwrapper
 
    # Install the github-release tool local to your user.
-   $ PATH=$HOME/.local/bin \
-     GOPATH=$HOME/.gopath \
-     go get -u github.com/aktau/github-release
+   $ go get -u github.com/meterup/github-release
 
    # Create a virtual environment for the last few pieces.
    $ mkvirtualenv -a $(pwd) --python=/usr/bin/python3.8 release
