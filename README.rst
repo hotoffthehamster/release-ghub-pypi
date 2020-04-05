@@ -165,6 +165,10 @@ This script has a handful of dependencies that should be easy to setup.
 
   (or skip the virtual environment and install systemwide).
 
+- And you'll obviously need Bash, as well as the standard pipeline tools,
+  like ``head`` and ``mktemp``, that are included in
+  `GNU coreutils <https://www.gnu.org/software/coreutils/>`__.
+
 Install example
 ===============
 
