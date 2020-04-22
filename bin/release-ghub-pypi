@@ -88,8 +88,22 @@ source_deps () {
   # Allow user to symlink executables and not libraries.
   prefix="$(dirname -- "$(readlink -e -- "${thispth}")")"
 
+  #                                                                 |
+  # *** end boilerplate. -------------------------------------------|
+
+  # Load ask_yesnoskip.
+  # https://github.com/landonb/sh-ask-yesnoskip
+  _source_it "${prefix}" "../deps/sh-ask-yesnoskip/bin" "ask-yesnoskip.sh"
+
   # https://github.com/landonb/sh-colors
   _source_it "${prefix}" "../deps/sh-colors/bin" "colors.sh"
+
+  # Load git_* functions.
+  # https://github.com/landonb/sh-git-nubs
+  _source_it "${prefix}" "../deps/sh-git-nubs/bin" "git-nubs.sh"
+
+  # *** finish with boilerplate. -----------------------------------|
+  #                                                                 |
 
   ! ${depsnok}
 }
@@ -278,38 +292,6 @@ workon_virtualenv () {
 
 # ###
 
-# Check that the current directory exists in a Git repo.
-must_cwd_a_git_project () {
-  # A naive approach is to check for the .git/ directory.
-  # Another approach is to check --show-toplevel, e.g.,
-  #   git rev-parse --show-toplevel &> /dev/null
-  # Except both those approaches are truthy before `git init`.
-  # A better naive approach might check if there are any refs:
-  #   command ls -A ".git/refs/heads"
-  # And the better porcelain command checks for HEAD.
-  git rev-parse --abbrev-ref HEAD &> /dev/null && return 0
-  local projpath="${PROJECT_PATH:-$(pwd)}"
-  local errmsg
-  if git rev-parse --show-toplevel &> /dev/null; then
-    errmsg="Specified Git project has no commits"
-  else
-    errmsg="Specified directory not a Git project"
-  fi
-  >&2 echo "ERROR: ${errmsg}: ${projpath}"
-  return 1
-}
-
-must_pristine_working () {
-  ! test -n "$(git status --porcelain)" && return 0
-  local projpath="${PROJECT_PATH:-$(pwd)}"
-  >&2 echo
-  >&2 echo "ERROR: Project working directory not tidy! Try:"
-  >&2 echo
-  >&2 echo "   cd ${projpath} && git status"
-  >&2 echo
-  return 1
-}
-
 # ***
 
 # (lb): Rather than call the two environments, 'dev' and 'prod', as in
@@ -348,21 +330,6 @@ setup_environ_vars_prod () {
   #
   R2G2P_PPUSER="${PYPI_PROD_USER}"
   R2G2P_PPPASS="${PYPI_PROD_PASS}"
-}
-
-git_branch_exists () {
-  local branch_name="${1:-${GITFLU_MYST_AT_BRANCH}}"
-  git show-ref --verify --quiet refs/heads/${branch_name}
-}
-
-git_branch_name () {
-  git rev-parse --abbrev-ref HEAD
-}
-
-git_remote_branch_exists () {
-  local remote="$1"
-  local branch="$2"
-  git show-branch remotes/${remote}/${branch} &> /dev/null
 }
 
 suss_release_environment_from_branch () {
@@ -704,35 +671,6 @@ setuppy_latest_version () {
   python setup.py --version 2> /dev/null && return
   >&2 echo "Local Project Missing ‘$(pwd)/setup.py’"
   return 1
-}
-
-# ***
-
-git_versions_tagged_for_commit () {
-  local hash="$1"
-  if [ -z "${hash}" ]; then
-    hash="$(git rev-parse HEAD)"
-  fi
-  # Without -d/--dereference, hash shown is tag object, not commit.
-  # With -d, prints 2 lines per tag, e.g., suppose 2 tags on one commit:
-  #   $ git show-ref --tags -d
-  #   af6ec9a9ae01592d36d06917e47b8ee9822178a7 refs/tags/v1.2.3
-  #   7ca83ee766d31181b34e6aafb340f537e2cc0d6f refs/tags/v1.2.3^{}
-  #   2aadd869b4ff4acc945b073a70be7e6573341ebc refs/tags/v1.2.3a3
-  #   7ca83ee766d31181b34e6aafb340f537e2cc0d6f refs/tags/v1.2.3a3^{}
-  # Where:
-  #   $ git cat-file -t af6ec9a9ae01592d36d06917e47b8ee9822178a7
-  #   tag
-  #   $ git cat-file -t 7ca83ee766d31181b34e6aafb340f537e2cc0d6f
-  #   commit
-  # So search on the known commit hash, which returns refs/tags/<tag>^{},
-  # then isolate just the tag -- and match only tags with a leading digit
-  # (assuming that indicates a version tag, to exclude non-version tags).
-  git show-ref --tags -d \
-    | grep "^${hash}.* refs/tags/v\?[0-9]" \
-    | command sed \
-      -e 's#.* refs/tags/v\?##' \
-      -e 's/\^{}//'
 }
 
 # ***
@@ -1214,38 +1152,8 @@ build_dist () {
 # ###
 
 yesnoskip_prompt () {
-  local the_ask="$1"
-  local default_choice="${2:-N}"
-  if [ "${default_choice}" = "Y" ]; then
-    lng_opts='Yes/no/skip'
-    sht_opts='Y/n/s'
-  elif [ "${default_choice}" = "N" ]; then
-    lng_opts='yes/No/skip'
-    sht_opts='y/N/s'
-  elif [ "${default_choice}" = "S" ]; then
-    lng_opts='yes/no/Skip'
-    sht_opts='y/n/S'
-  else
-    >&2 echo "ASSERT: Unrecognized default_choice: ${default_choice}"
-    death_and_die
-  fi
-  ${SKIP_PROMPT_NL:-false} || >&2 echo
-  >&2 echo -n "Please ${lng_opts}: ${the_ask}? [${sht_opts}] "
-  # USER_PROMPT
-  local the_choice
-  ${SKIP_PROMPTS:-false} && the_choice='s' || read -e the_choice
-  [ -z "${the_choice}" ] && the_choice="${default_choice}"
-  the_choice="${the_choice,,}"  # lower.
-  # We could consider just the first character:
-  #   the_choice=${the_choice:0:1}
-  # or just demand a one-character response.
-  if [ "${the_choice}" != "y" ] && [ "${the_choice}" != "s" ]; then
-    death_and_die
-  fi
-  echo "${the_choice}"
+  ask_yesnoskip "$@" || death_and_die
 }
-
-# ***
 
 github_release_info () {
   local rel_vers="${1:-$RELEASE_VERSION}"
@@ -1269,74 +1177,6 @@ github_release_info () {
   echo "${response}" | jq '.message'
   echo "${response}" | grep "created_at" || true
   echo "${response}" | grep "published_at" || true
-}
-
-# ***
-
-github_purge_release_and_tags_of_same_name () {
-  # Reentrant support: If previously tagged and released, remove the
-  # GitHub release if user wants, and remove tag from remote if points
-  # to different commit and user approves.
-
-  # See also, for a list of all tags, e.g.,:
-  #   git ls-remote --tags origin
-  # Note that we can restrict to tags with a fuller path, or with an --option.
-  #   git ls-remote ${R2G2P_REMOTE} refs/tags/${RELEASE_VERSION}
-  #   git ls-remote ${R2G2P_REMOTE} --tags ${RELEASE_VERSION}
-  #   git ls-remote ${R2G2P_REMOTE} --tags refs/tags/${RELEASE_VERSION}
-  # NOTE: This call takes a moment. (lb): Must be contacting the remote?
-  # NOTE: Use default `cut` delimiter, TAB.
-  local remote_tag_hash
-  echo -n "Send remote request: ‘git ls-remote --tags ${R2G2P_REMOTE} ${RELEASE_VERSION}’..."
-  remote_tag_hash="$(git ls-remote --tags ${R2G2P_REMOTE} ${RELEASE_VERSION} | cut -f1)"
-  echo " ${remote_tag_hash}"
-
-  local tag_commit_hash
-  R2G2P_DO_PUSH_TAG=false
-  if [ -z "${remote_tag_hash}" ]; then
-    R2G2P_DO_PUSH_TAG=true
-  else
-    tag_commit_hash="$(git rev-list -n 1 ${remote_tag_hash})"
-    if [ "${tag_commit_hash}" = "${R2G2P_COMMIT}" ]; then
-      # The remote tag has the same commit hash as the current release.
-      # No need to send tag again, unless clobbering GitHub release,
-      # in which case remove the tag, which removes the lightweight (non-annotated)
-      # release from https://github.com/user/repo/releases that's automatically
-      # generated according to tags ((lb): or whatever; I'm not quite sure how
-      # it works, just that deleting the tag clears the entry).
-      ${R2G2P_GHUB_CLOBBER_CERTIFIED:-false} && R2G2P_DO_PUSH_TAG=true
-    else
-      echo
-      echo "🚨 ATTENTION 🚨: The tag on ‘${R2G2P_REMOTE}’ refers to a different commit."
-      echo
-      echo "    release tag ref.  ${R2G2P_COMMIT}"
-      echo "    remote tag ref..  ${tag_commit_hash}"
-      echo
-      echo -n "Would you like to delete the old remote tag? [y/N] "
-      # USER_PROMPT
-      ${SKIP_PROMPTS:-false} && the_choice='n' || read -e the_choice
-      if [ "${the_choice}" = "y" ] || [ "${the_choice}" = "Y" ]; then
-        R2G2P_DO_PUSH_TAG=true
-      else
-        >&2 echo
-        >&2 echo "ERROR: Tag ‘${RELEASE_VERSION}’ mismatch on ‘${R2G2P_REMOTE}’."
-        >&2 echo
-        return 1
-      fi
-    fi
-  fi
-
-  if ${R2G2P_DO_PUSH_TAG} && [ -n "${tag_commit_hash}" ]; then
-    # (lb): I realize there's a less obtuse syntax to delete tags, e.g.,
-    #           git push --delete ${R2G2P_REMOTE} ${RELEASE_VERSION}
-    #       But that syntax might also delete a branch of the same name.
-    #       So be :obtuse, and be specific about what's being deleted.
-    local gpr_args="${R2G2P_REMOTE} :refs/tags/${RELEASE_VERSION}"
-    echo "Deleting Remote Tag: ‘${gpr_args}’"
-    xtrace_beg
-    git push ${gpr_args}
-    xtrace_end
-  fi
 }
 
 # ***
@@ -1819,10 +1659,10 @@ release_project () {
   # ***
 
   # Demand in a git repo.
-  must_cwd_a_git_project
+  git_insist_git_repo "${PROJECT_PATH}"
 
   # Demand that git is tidy in the working directory.
-  must_pristine_working
+  git_insist_pristine "${PROJECT_PATH}"
 
   # Change to the appropriate branch, develop or master.
   suss_release_environment_from_branch
@@ -1905,15 +1745,21 @@ release-ghub-pypi () {
 
 # ***
 
-source_deps "${BASH_SOURCE[0]}"
-unset -f source_deps
+main () {
+  local depsok=true
+  source_deps "${BASH_SOURCE[0]}" || depsok=false
+  unset -f source_deps
+  ${depsok} || return 1
 
-if [ "${BASH_SOURCE[0]}" != "$0" ]; then
-  # SKIP: (because user should write their own):
-  #   export -f setup_project_vars
-  export -f release-ghub-pypi
-else
-  setup_project_vars
-  release-ghub-pypi "${@}"
-fi
+  if [ "${BASH_SOURCE[0]}" != "$0" ]; then
+    # SKIP: (because user should write their own):
+    #   export -f setup_project_vars
+    export -f release-ghub-pypi
+  else
+    setup_project_vars
+    release-ghub-pypi "${@}"
+  fi
+}
+
+main "${@}"
 
