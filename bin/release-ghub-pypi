@@ -22,14 +22,14 @@ setup_project_vars () {
   GHUB_DEV_USER=developer
   GHUB_DEV_REPO=${myproj}
   GHUB_DEV_PASS=proj/github-employee-GITHUB_TOKEN
-  GHUB_DEV_BRANCH='develop'
-  GHUB_DEV_REMOTE='origin'
+  GHUB_DEV_BRANCH='proving'
+  GHUB_DEV_REMOTE='proving'
   #
   GHUB_ORG_USER=organization
   GHUB_ORG_REPO=${myproj}
   GHUB_ORG_PASS=proj/github-employer-GITHUB_TOKEN
-  GHUB_ORG_BRANCH='master'
-  GHUB_ORG_REMOTE='upstream'
+  GHUB_ORG_BRANCH='release'
+  GHUB_ORG_REMOTE='release'
 
   PYPI_PROJECT=${myproj}
   PYPI_PACKAGE=${mypack}
@@ -365,7 +365,7 @@ suss_release_environment_from_branch () {
         >&2 echo "ERROR: No such branch GHUB_DEV_BRANCH=${GHUB_DEV_BRANCH}"
         >&2 echo " HINT: If you want to use the current branch,"
         >&2 echo "       set GHUB_DEV_BRANCH for test release; and"
-        >&2 echo "       set GHUB_ORG_BRANCH also for prod release."
+        >&2 echo "       set GHUB_ORG_BRANCH for prod release."
         return 1
       fi
       # git-checkout prints, e.g.,
