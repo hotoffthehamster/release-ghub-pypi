@@ -648,7 +648,7 @@ ghub_latest_version () {
   local gh_user="${1:-$R2G2P_GHUSER}"
   local gh_repo="${2:-$R2G2P_GHREPO}"
   # E.g.,
-  #   curl -s https://api.github.com/repos/hotoffthehamster/nark/releases/latest \
+  #   curl -s https://api.github.com/repos/tallybark/nark/releases/latest \
   #   | jq -r '.tag_name'
   # NOTE: Use token to avoid rate-limiting (or at least increase ceiling).
   curl_latest_version \
