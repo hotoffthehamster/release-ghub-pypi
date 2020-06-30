@@ -4,8 +4,8 @@ release-ghub-pypi
 
 .. FEAT-REQU/2020-01-25: (lb): Add kcov Bash coverage of the release script.
 
-.. .. image:: https://travis-ci.org/hotoffthehamster/release-ghub-pypi.svg?branch=develop
-..   :target: https://travis-ci.org/hotoffthehamster/release-ghub-pypi
+.. .. image:: https://travis-ci.com/hotoffthehamster/release-ghub-pypi.svg?branch=develop
+..   :target: https://travis-ci.com/hotoffthehamster/release-ghub-pypi
 ..   :alt: Build Status
 ..
 .. .. image:: https://codecov.io/gh/hotoffthehamster/release-ghub-pypi/branch/develop/graph/badge.svg
