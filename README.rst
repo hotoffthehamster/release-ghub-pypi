@@ -4,11 +4,11 @@ release-ghub-pypi
 
 .. FEAT-REQU/2020-01-25: (lb): Add kcov Bash coverage of the release script.
 
-.. .. image:: https://travis-ci.com/hotoffthehamster/release-ghub-pypi.svg?branch=develop
+.. .. image:: https://travis-ci.com/hotoffthehamster/release-ghub-pypi.svg?branch=release
 ..   :target: https://travis-ci.com/hotoffthehamster/release-ghub-pypi
 ..   :alt: Build Status
 ..
-.. .. image:: https://codecov.io/gh/hotoffthehamster/release-ghub-pypi/branch/develop/graph/badge.svg
+.. .. image:: https://codecov.io/gh/hotoffthehamster/release-ghub-pypi/branch/release/graph/badge.svg
 ..   :target: https://codecov.io/gh/hotoffthehamster/release-ghub-pypi
 ..   :alt: Coverage Status
 ..
@@ -21,7 +21,7 @@ release-ghub-pypi
 ..   :alt: GitHub Release Status
 
 .. image:: https://img.shields.io/github/license/hotoffthehamster/release-ghub-pypi.svg?style=flat
-  :target: https://github.com/hotoffthehamster/release-ghub-pypi/blob/develop/LICENSE
+  :target: https://github.com/hotoffthehamster/release-ghub-pypi/blob/release/LICENSE
   :alt: License Status
 
 One dev's tool to codify their release process.
@@ -48,12 +48,12 @@ published to GitHub and to PyPI.org.
 
 - The tool handles both *test* and *production* releases:
 
-  - The tool prepares *test* releases from the 'develop' branch.
+  - The tool prepares *test* releases from the 'proving' branch.
 
     - It uploads the compiled distribution to the developer's GitHub
       releases and to the test.PyPI.org server.
 
-  - The tool prepares *production* releases from the 'master' branch.
+  - The tool prepares *production* releases from the 'release' branch.
 
     - It uploads the compiled distribution to the organization's GitHub
       releases and to the production PyPI.org server.
@@ -62,14 +62,14 @@ published to GitHub and to PyPI.org.
   (``pass``).
 
 When you run the tool, it checks which branch is checked out to decide what
-to do — if your 'master' branch is checked out, the tool prepares a production
+to do — if your 'release' branch is checked out, the tool prepares a production
 release. Otherwise, if any other branch is checked out, the tool changes to
-the 'develop' branch and prepares a test package.
+the 'proving' branch and prepares a test package.
 
 The release tool behavior is driven by the different release versions
 it finds, and a little user interaction.
 
-- The latest commit of the 'develop' or 'master' branch must have a version tag.
+- The latest commit of the 'proving' or 'release' branch must have a version tag.
 
   - The current release version is determined from the version tag on the latest git commit.
 
@@ -280,14 +280,14 @@ Here's how a release wrapper might look::
     GHUB_DEV_USER=landonb
     GHUB_DEV_REPO=${myproj}
     GHUB_DEV_PASS=github-landonb-GITHUB_TOKEN
-    GHUB_DEV_BRANCH='develop'
-    GHUB_DEV_REMOTE='origin'
+    GHUB_DEV_BRANCH='proving'
+    GHUB_DEV_REMOTE='proving'
     #
     GHUB_ORG_USER=hotoffthehamster
     GHUB_ORG_REPO=${myproj}
     GHUB_ORG_PASS=github-hotoffthehamster-GITHUB_TOKEN
-    GHUB_ORG_BRANCH='master'
-    GHUB_ORG_REMOTE='upstream'
+    GHUB_ORG_BRANCH='release'
+    GHUB_ORG_REMOTE='release'
 
     PYPI_PROJECT=${myproj}
     PYPI_PACKAGE=${mypack}
