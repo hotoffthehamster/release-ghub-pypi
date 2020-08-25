@@ -1511,7 +1511,7 @@ smoke_test_pypi_environment () {
   cd "${venv_tdir}"
 
   print_section_break "Searching pip for ‘${R2G2P_GHREPO}’:"
-  pip search ${pip_search_index} ${R2G2P_GHREPO} |& head -n 3
+  pip search ${pip_search_index} ${R2G2P_GHREPO} 2>&1 | head -n 3
 
   print_section_break "(Re)creating virtual environment ‘${venv_name}’:"
 
