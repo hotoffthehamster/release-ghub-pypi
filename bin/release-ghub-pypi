@@ -1098,41 +1098,54 @@ parse_release_blurb_from_history_docs_md () {
 prompt_verify_release_blurb () {
   # Prompt about the HISTORY snippet, but not if not uploading to GitHub.
   ${R2G2P_GHUB_RELEASE_NO_UPLOAD} && return
-  print_section_break
 
   warn () {
     >&2 echo "$(attr_bold)$(fg_white)$(bg_maroon)${@}$(attr_reset)"
   }
 
-  # MEH/2020-01-19: (lb): How difficult/strict you wanna make this?
-  # E.g., would it be to much to expect the first line to look like
-  # the following, and to have the appropriate version?:
-  #
-  #      ## 3.0.0rc1 (2020-01-18)
-  #
-  # For now, let's just warn if the versions don't align.
-  if ! echo "${RELEASE_TEXT}" \
-     | head -1 \
-     | grep "## ${RELEASE_VERSION} (" > /dev/null\
-  ; then
-    local history_version
-    history_version=$(
-      echo "${RELEASE_TEXT}" | head -1 | /usr/bin/env sed -e 's/^## \([^ ]\+\).*$/\1/'
-    )
-    warn "WARNING: Release text version does not match tag!"
-    warn "           ${history_version} != ${RELEASE_VERSION}"
-  fi
+  warn_if_versions_do_not_match () {
+    # MEH/2020-01-19: (lb): How difficult/strict you wanna make this?
+    # E.g., would it be to much to expect the first line to look like
+    # the following, and to have the appropriate version?:
+    #
+    #      ## 3.0.0rc1 (2020-01-18)
+    #
+    # For now, let's just warn if the versions don't align.
+    if ! echo "${RELEASE_TEXT}" \
+       | head -1 \
+       | grep "## ${RELEASE_VERSION} (" > /dev/null\
+    ; then
+      local history_version
+      history_version=$(
+        echo "${RELEASE_TEXT}" | head -1 | /usr/bin/env sed -e 's/^## \([^ ]\+\).*$/\1/'
+      )
+      warn "WARNING: Release text version does not match tag!"
+      warn "           ${history_version} != ${RELEASE_VERSION}"
+    fi
+  }
 
-  echo "${RELEASE_TEXT}"
+  first_char_capped () {
+    echo "$1" | cut -c1-1 | tr '[:lower:]' '[:upper:]'
+  }
+
+  prompt_release_copy_okay () {
+    echo "${RELEASE_TEXT}"
+    print_section_break
+    echo -n "Does this release copy look okay? [Y/n] "
+    # USER_PROMPT
+    ${SKIP_PROMPTS:-false} && YES_OR_NO='y' || read -e YES_OR_NO
+    # More complicated: Make POSIX-compliant. Was Bash 4.x+ only:
+    #   if [[ ${YES_OR_NO^^} =~ ^Y.* ]] || [ -z "${YES_OR_NO}" ]; then
+    if [ -z "${YES_OR_NO}" ] || [ "$(first_char_capped ${YES_OR_NO})" = 'Y' ]; then
+      return 0
+    else
+      return 1
+    fi
+  }
+
   print_section_break
-  echo -n "Does this release copy look okay? [Y/n] "
-  # USER_PROMPT
-  ${SKIP_PROMPTS:-false} && YES_OR_NO='y' || read -e YES_OR_NO
-  if [[ ${YES_OR_NO^^} =~ ^Y.* ]] || [ -z "${YES_OR_NO}" ]; then
-    return 0
-  else
-    return 1
-  fi
+  warn_if_versions_do_not_match
+  return prompt_release_copy_okay
 }
 
 # ***
