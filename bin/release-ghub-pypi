@@ -572,7 +572,7 @@ json_parse_version () {
   # NOTE: In lieu of lookahead assertions, use a negative pre-test thingy.
   #       I.e., if version start with 'v' and then a digit, remove the 'v';
   #       otherwise, do not touch it.
-  echo "${vers}" | /bin/sed '/^v[^0-9]/! s/^v//'
+  echo "${vers}" | /usr/bin/env sed '/^v[^0-9]/! s/^v//'
   return 0
 }
 
@@ -748,7 +748,7 @@ githead_latest_version () {
     # and also increments the patch or pre-release part.
     local patch_bump="$( \
       echo ${SETUPPY_LATEST_VERSION} \
-      | /bin/sed 's/^\([^.]\+\.[^.]\+\.[^.]\+\).*/\1/' \
+      | /usr/bin/env sed 's/^\([^.]\+\.[^.]\+\.[^.]\+\).*/\1/' \
     )"
     >&2 echo "  Depending on which part of the version you want to bump"
     >&2 echo "  (major, minor, patch, or pre-release), you could, e.g.,"
@@ -1117,7 +1117,7 @@ prompt_verify_release_blurb () {
   ; then
     local history_version
     history_version=$(
-      echo "${RELEASE_TEXT}" | head -1 | /bin/sed -e 's/^## \([^ ]\+\).*$/\1/'
+      echo "${RELEASE_TEXT}" | head -1 | /usr/bin/env sed -e 's/^## \([^ ]\+\).*$/\1/'
     )
     warn "WARNING: Release text version does not match tag!"
     warn "           ${history_version} != ${RELEASE_VERSION}"
