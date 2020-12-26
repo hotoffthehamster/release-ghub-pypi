@@ -688,7 +688,7 @@ pypi_latest_version () {
     # There's a pre-release available for the current tag version,
     # so consider that the PyPI version...
     echo "${GITHEAD_LATEST_VERSION}"
-    # ... but also do a quick sanity check.
+    # ... but also do a quick validation.
     pep440cmp ${pub_vers} le ${GITHEAD_LATEST_VERSION} > /dev/null && return 0
     >&2 echo
     >&2 echo "ERROR: Public PyPI version is greater than pre-release you want to release."
@@ -872,7 +872,7 @@ warn_new_release_eq_pypi_latest () {
 must_new_release_gt_pypi_latest () {
   local pypi_version="$1"
   local pypi_env_hint="$(pypi_hint_from_deploy_env $2)"
-  # For sanity's sake, check PyPI version is less than the new release.
+  # Because validation, check PyPI version is less than the new release.
   [ -z "${pypi_version}" ] && return
   pep440cmp ${pypi_version} le ${RELEASE_VERSION} > /dev/null && return
   >&2 echo
@@ -959,7 +959,7 @@ ghub_lt_pypi_alright_user_confirm () {
 }
 
 must_ghub_latest_ge_pypi_latest () {
-  # One final version sanity check.
+  # One final version validation.
   local pypi_latest_version="$1"
   local ghub_latest_version="$2"
   local pypi_env_hint="$(pypi_hint_from_deploy_env $3)"
@@ -1040,8 +1040,8 @@ must_determine_release_version () {
 # ***
 
 must_reconcile_latest_versions () {
-  # (Sanity) Check the HEAD tag's version matches the Python package version.
-  # (Really just a paranoid check that `make develop` worked as expected.)
+  # (Validate) Check the HEAD tag's version matches the Python package version.
+  # (Really just a double triple check that `make develop` worked as expected.)
   must_new_release_eq_get_distribution
 
   local pypi_latest_version
@@ -1060,11 +1060,11 @@ must_reconcile_latest_versions () {
   must_new_release_gt_pypi_latest "${pypi_latest_version}"
 
   # Unlike PyPI, a GitHub release version can be removed and overwritten.
-  # So here we just do a sanity check that at least the GitHub version is
+  # So here we just do a validation that at least the GitHub version is
   # the same or less than the new release version.
   must_new_release_ge_ghub_latest "${ghub_latest_version}"
 
-  # Complete the version sanity checks, this one that ghub >= pypi.
+  # Complete the version validations, this one that ghub >= pypi.
   must_ghub_latest_ge_pypi_latest "${pypi_latest_version}" \
                                   "${ghub_latest_version}"
 

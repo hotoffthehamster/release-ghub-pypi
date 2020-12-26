@@ -113,7 +113,7 @@ it finds, and a little user interaction.
     release -- the tool will run a simple smoke test against the release.
 
     - The smoke test creates a new Python virtual environment, installs the
-      package, and runs a basic sanity check: it prints the package docstring,
+      package, and runs a basic validation: it prints the package docstring,
       and it compares the package version against the current release version.
 
 - Finally, on success, the tool opens browser windows to both of the project's
