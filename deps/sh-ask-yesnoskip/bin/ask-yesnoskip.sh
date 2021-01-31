@@ -27,7 +27,7 @@ ask_yesnoskip () {
   fi
 
   ${SKIP_PROMPT_NL:-false} || >&2 echo
-  >&2 /usr/bin/env echo -n "Please ${lng_opts}: ${the_ask}? [${sht_opts}] "
+  >&2 printf %s "Please ${lng_opts}: ${the_ask}? [${sht_opts}] "
 
   local the_choice
   ${SKIP_PROMPTS:-false} && the_choice='s' || read -e the_choice
@@ -40,7 +40,7 @@ ask_yesnoskip () {
   if [ "${the_choice}" != "y" ] && [ "${the_choice}" != "s" ]; then
     return 1
   fi
-  echo "${the_choice}"
+  printf %s "${the_choice}"
 }
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
