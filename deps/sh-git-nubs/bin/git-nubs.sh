@@ -21,8 +21,18 @@ git_branch_name () {
     echo "<?!>"
     return
   fi
-  local branch_name=$(git rev-parse --abbrev-ref HEAD)
-  echo "${branch_name}"
+  # 2020-09-21: (lb): Adding `=loose`:
+  # - For whatever reason, I'm seeing this behavior:
+  #   - On Linux, `git rev-parse --abbrev-ref` returns simply, e.g., "my_branch".
+  #   - But on macOS, rev-parse returns a more qualified name, "heads/my_branch".
+  # - I think that's because, on macOS (for whatever reason), there are two
+  #   remote refs: .git/refs/remotes/release/HEAD
+  #           and: .git/refs/remotes/release/release
+  # - Use `loose` option to remove the "heads/" prefix, e.g.,
+  #      $ git rev-parse --abbrev-ref=loose   # Prints, e.g., "my_branch"
+  #      $ git rev-parse --abbrev-ref=strict  # Prints, e.g., "heads/my_branch"
+  local branch_name=$(git rev-parse --abbrev-ref=loose HEAD)
+  printf %s "${branch_name}"
 }
 
 git_remote_exists () {
@@ -101,8 +111,21 @@ git_versions_tagged_for_commit () {
 
 # +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ #
 
-GITSMART_RE_VERSION_TAG='[v0-9][0-9.]*'
+# FIXME/2020-12-13 23:44: See git-bump-version-tag's GITSMART_RE_VERSION_TAG
+# - Because glob, this could match similar-looking tags, e.g., date-prefixed,
+#   such as 2020-12-13-some-tag.
+#
+# This is matches anything starting with two numbers,
+# of v and a number, or v and a period, so not really
+# what's probably intended:
+#   GITSMART_RE_VERSION_TAG='[v0-9][0-9.]*'
+GITSMART_RE_VERSION_TAG='[v0-9]*'
 
+# FIXME/2020-12-13 23:43: Would you want `latest_version_basetag` here instead?
+# - The two functions might be doing same thing, and latest_version_basetag is
+#   more hardened, I think... although it might also find tags in whole project,
+#   and not just current branch like this function does?
+#
 git_last_version_tag_describe () {
   # By default, git-describe returns a commit-ish object representing the same
   # commit as the referenced commit (which defaults to HEAD). The described name
@@ -116,8 +139,24 @@ git_last_version_tag_describe () {
   git describe --tags --abbrev=0 --match "${GITSMART_RE_VERSION_TAG}" 2> /dev/null
 }
 
+# The git-tag pattern is a simple glob, so use extra grep to really filter.
+GITSMART_RE_GREPFILTER='^[0-9]\+\.[0-9.]\+$'
+
+# Match groups: \1: major * \2: minor * \4: patch * \5: seppa * \6: alpha.
+GITSMART_RE_VERSPARTS='^v?([0-9]+)\.([0-9]+)(\.([0-9]+)([^0-9]*)(.*))?'
+
+latest_version_basetag () {
+  git tag -l "${GITSMART_RE_VERSION_TAG}" |
+    grep -e "${GITSMART_RE_GREPFILTER}" |
+    /usr/bin/env sed -E "s/${GITSMART_RE_VERSPARTS}/\1.\2.\4/" |
+    sort -r --version-sort |
+    head -n1
+}
+
+# ***
+
 git_last_version_tag_describe_safe () {
-  git_last_version_tag_describe || echo '0.0.0-✗-g0000000'
+  git_last_version_tag_describe || printf '0.0.0-✗-g0000000'
 }
 
 # Unused...
@@ -126,12 +165,12 @@ if false; then
 
   git_last_version_name () {
     local described="$(git_last_version_tag_describe_safe)"
-    echo ${described} | /bin/sed -E "s/${GITSMART_RE_LONG_TAG_PARTS}/\1/g"
+    printf "${described}" | /bin/sed -E "s/${GITSMART_RE_LONG_TAG_PARTS}/\1/g"
   }
 
   git_last_version_dist () {
     local described="$(git_last_version_tag_describe_safe)"
-    echo ${described} | /bin/sed -E "s/${GITSMART_RE_LONG_TAG_PARTS}/\2/g"
+    printf "${described}" | /bin/sed -E "s/${GITSMART_RE_LONG_TAG_PARTS}/\2/g"
   }
 
   git_last_version_absent () {
@@ -140,7 +179,11 @@ if false; then
   }
 fi
 
-git_last_version_epoch_ts () {
+git_since_most_recent_commit_epoch_ts () {
+  git --no-pager log -1 --format=%at HEAD 2> /dev/null
+}
+
+git_since_latest_version_tag_epoch_ts () {
   # Note that the "described" tag output (e.g., 0.12.0-828-g0266e06) is a
   # valid revision (per `man 7 gitrevisions`), which can be fed to git-log.
   # - And to compute a time delta from then to now, get seconds since epoch:
@@ -153,7 +196,7 @@ git_last_version_epoch_ts () {
     2> /dev/null
 }
 
-git_since_init_epoch_ts () {
+git_since_git_init_commit_epoch_ts () {
   # Note that the "described" tag output (e.g., 0.12.0-828-g0266e06) is a
   # valid revision (per `man 7 gitrevisions`), which can be fed to git-log.
   # - And to compute a time delta from then to now, get seconds since epoch:
@@ -188,8 +231,8 @@ github_purge_release_and_tags_of_same_name () {
   # GitHub release if user wants, and remove tag from remote if points
   # to different commit and user approves.
 
-  # See also, for a list of all tags, e.g.,:
-  #   git ls-remote --tags origin
+  # See also, for a list of all tags on a remote, e.g., the one named 'release':
+  #   git ls-remote --tags release
   # Note that we can restrict to tags with a fuller path, or with an --option.
   #   git ls-remote ${R2G2P_REMOTE} refs/tags/${RELEASE_VERSION}
   #   git ls-remote ${R2G2P_REMOTE} --tags ${RELEASE_VERSION}
@@ -197,9 +240,10 @@ github_purge_release_and_tags_of_same_name () {
   # NOTE: This call takes a moment. (lb): Must be contacting the remote?
   # NOTE: Use default `cut` delimiter, TAB.
   local remote_tag_hash
-  echo -n "Send remote request: ‘git ls-remote --tags ${R2G2P_REMOTE} ${RELEASE_VERSION}’..."
+  printf '%s' \
+    "Send remote request: ‘git ls-remote --tags ${R2G2P_REMOTE} ${RELEASE_VERSION}’..."
   remote_tag_hash="$(git ls-remote --tags ${R2G2P_REMOTE} ${RELEASE_VERSION} | cut -f1)"
-  echo " ${remote_tag_hash}"
+  printf '%s\n' " ${remote_tag_hash}"
 
   local tag_commit_hash
   R2G2P_DO_PUSH_TAG=false
@@ -222,7 +266,7 @@ github_purge_release_and_tags_of_same_name () {
       echo "    release tag ref.  ${R2G2P_COMMIT}"
       echo "    remote tag ref..  ${tag_commit_hash}"
       echo
-      echo -n "Would you like to delete the old remote tag? [y/N] "
+      printf %s "Would you like to delete the old remote tag? [y/N] "
       # USER_PROMPT
       ${SKIP_PROMPTS:-false} && the_choice='n' || read -e the_choice
       if [ "${the_choice}" = "y" ] || [ "${the_choice}" = "Y" ]; then
