@@ -284,7 +284,7 @@ must_prereqs_virtualenv () {
   # PATH and remove the venv remnants from environment that called upon us.
   PATH=$(echo "${PATH//:/$'\n'}" | grep -v -e "^${HOME}/.virtualenvs/" | tr '\n' ':')
 
-  source "${VENV_WRAPPER}"
+  . "${VENV_WRAPPER}"
 
   local okay=true
   for cmdname in \
