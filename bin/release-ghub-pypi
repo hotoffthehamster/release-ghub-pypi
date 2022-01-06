@@ -1701,7 +1701,10 @@ browser_load_url () {
   # process (alternatively, check, say, `pidof ${BROWSER}`
   # to see if the browser is running or not. But & easier.
   local url="$1"
-  sensible-browser "${url}" > /dev/null 2>&1 &
+  # If you need this to work on macOS, see `sensible-open "${url}"`, from
+  #   https://github.com/landonb/sh-sensible-open#☔
+  # But I only run this script on Linux, so not concerned.
+  sensible-browser --new-window --profile-directory=Default "${url}" > /dev/null 2>&1 &
 }
 
 browser_open_github_releases () {
